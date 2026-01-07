@@ -1,0 +1,105 @@
+# Controller配置文件
+
+controller:
+  # HTTP API监听地址
+  listen_addr: ":8443"
+  
+  # gRPC监听地址
+  grpc_addr: ":8444"
+  
+  # Web UI监听地址
+  web_addr: ":8080"
+  
+  # TLS配置（可选）
+  tls:
+    enabled: false
+    cert_file: "/etc/micro-segment/tls/server.crt"
+    key_file: "/etc/micro-segment/tls/server.key"
+
+# 存储配置
+storage:
+  # 存储类型: etcd, memory
+  type: "etcd"
+  
+  # etcd配置
+  etcd:
+    endpoints:
+      - "etcd:2379"
+    timeout: 5
+    username: ""
+    password: ""
+    
+  # 内存存储配置（仅用于测试）
+  memory:
+    persist: false
+
+# 网络拓扑图配置
+graph:
+  # 图更新间隔（秒）
+  update_interval: 5
+  
+  # 最大节点数
+  max_nodes: 10000
+  
+  # 最大连接数
+  max_connections: 100000
+  
+  # 连接过期时间（秒）
+  connection_ttl: 300
+  
+  # 节点过期时间（秒）
+  node_ttl: 600
+
+# 策略配置
+policy:
+  # 默认策略模式: monitor, protect
+  default_mode: "monitor"
+  
+  # 策略规则ID范围
+  rule_id_start: 10000
+  rule_id_max: 1000000
+  
+  # 策略缓存大小
+  cache_size: 10000
+
+# 组配置
+group:
+  # 默认组
+  default_groups:
+    - name: "containers"
+      kind: "container"
+      policy_mode: "monitor"
+    - name: "nodes"
+      kind: "node"
+      policy_mode: "monitor"
+
+# 日志配置
+logging:
+  # 日志级别: debug, info, warn, error
+  level: "info"
+  
+  # 日志文件路径
+  file: "/var/log/micro-segment/controller.log"
+  
+  # 日志格式: json, text
+  format: "json"
+  
+  # 日志轮转
+  rotation:
+    max_size: 100    # MB
+    max_backups: 3
+    max_age: 7       # 天
+
+# 监控配置
+monitoring:
+  # Prometheus metrics端口
+  metrics_port: 9092
+  
+  # 健康检查端口
+  health_port: 9093
+
+# 认证配置（可选）
+auth:
+  enabled: false
+  jwt_secret: "change-me-in-production"
+  token_expiry: 3600  # 秒

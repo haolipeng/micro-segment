@@ -1,0 +1,93 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  background-color: #f0f2f5;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+.logo {
+  height: 32px;
+  margin: 16px;
+  color: white;
+  font-size: 18px;
+  font-weight: bold;
+  text-align: center;
+  line-height: 32px;
+}
+
+.site-layout-content {
+  padding: 24px;
+  min-height: 280px;
+}
+
+.network-graph {
+  width: 100%;
+  height: 600px;
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+.network-graph svg {
+  width: 100%;
+  height: 100%;
+}
+
+.node circle {
+  stroke: #fff;
+  stroke-width: 2px;
+  cursor: pointer;
+}
+
+.node text {
+  font-size: 12px;
+  fill: #333;
+  pointer-events: none;
+}
+
+.link {
+  stroke: #999;
+  stroke-opacity: 0.6;
+}
+
+.link.violate {
+  stroke: #ff4d4f;
+  stroke-width: 2px;
+}
+
+.link.deny {
+  stroke: #ff7a45;
+  stroke-width: 2px;
+}
+
+.tooltip {
+  position: absolute;
+  padding: 8px 12px;
+  background: rgba(0, 0, 0, 0.8);
+  color: white;
+  border-radius: 4px;
+  font-size: 12px;
+  pointer-events: none;
+  z-index: 1000;
+}
+
+.stat-card {
+  text-align: center;
+}
+
+.stat-card .ant-statistic-title {
+  font-size: 14px;
+  color: #666;
+}
+
+.stat-card .ant-statistic-content {
+  font-size: 24px;
+}

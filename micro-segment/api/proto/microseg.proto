@@ -1,0 +1,291 @@
+// 微隔离 gRPC 协议定义
+// Agent <-> Controller 通信协议
+
+syntax = "proto3";
+
+package microseg;
+
+option go_package = "github.com/micro-segment/api/proto";
+
+// ============================================
+// Agent 服务 - Controller 调用 Agent
+// ============================================
+
+service AgentService {
+    // 配置策略
+    rpc ConfigPolicy(PolicyConfig) returns (ConfigResponse);
+    
+    // 配置组策略模式
+    rpc ConfigGroupMode(GroupModeConfig) returns (ConfigResponse);
+    
+    // 配置内部子网
+    rpc ConfigSubnets(SubnetConfig) returns (ConfigResponse);
+    
+    // 获取Agent状态
+    rpc GetStatus(Empty) returns (AgentStatus);
+    
+    // 获取工作负载列表
+    rpc GetWorkloads(Empty) returns (WorkloadList);
+}
+
+// ============================================
+// Controller 服务 - Agent 调用 Controller
+// ============================================
+
+service ControllerService {
+    // Agent 注册
+    rpc Register(AgentInfo) returns (RegisterResponse);
+    
+    // Agent 心跳
+    rpc Heartbeat(HeartbeatRequest) returns (HeartbeatResponse);
+    
+    // 上报连接
+    rpc ReportConnections(ConnectionReport) returns (ReportResponse);
+    
+    // 上报威胁日志
+    rpc ReportThreats(ThreatReport) returns (ReportResponse);
+    
+    // 上报工作负载变更
+    rpc ReportWorkload(WorkloadEvent) returns (ReportResponse);
+    
+    // 获取策略
+    rpc GetPolicies(PolicyRequest) returns (PolicyList);
+}
+
+// ============================================
+// 通用消息
+// ============================================
+
+message Empty {}
+
+message ConfigResponse {
+    int32 code = 1;
+    string message = 2;
+}
+
+message ReportResponse {
+    int32 code = 1;
+    string message = 2;
+    uint32 report_interval = 3;  // 建议的上报间隔（秒）
+}
+
+// ============================================
+// Agent 相关消息
+// ============================================
+
+message AgentInfo {
+    string agent_id = 1;
+    string host_id = 2;
+    string host_name = 3;
+    string version = 4;
+    string platform = 5;
+}
+
+message RegisterResponse {
+    int32 code = 1;
+    string message = 2;
+    string cluster_id = 3;
+    uint32 report_interval = 4;
+}
+
+message HeartbeatRequest {
+    string agent_id = 1;
+    uint64 timestamp = 2;
+    AgentStats stats = 3;
+}
+
+message HeartbeatResponse {
+    int32 code = 1;
+    uint64 timestamp = 2;
+}
+
+message AgentStats {
+    uint32 workload_count = 1;
+    uint32 connection_count = 2;
+    uint32 policy_count = 3;
+    uint64 memory_usage = 4;
+    float cpu_usage = 5;
+}
+
+message AgentStatus {
+    string agent_id = 1;
+    string host_id = 2;
+    string host_name = 3;
+    string version = 4;
+    bool dp_connected = 5;
+    string policy_mode = 6;
+    AgentStats stats = 7;
+}
+
+// ============================================
+// 工作负载相关消息
+// ============================================
+
+message Workload {
+    string id = 1;
+    string name = 2;
+    string host_id = 3;
+    string host_name = 4;
+    string domain = 5;
+    string service = 6;
+    string image = 7;
+    string policy_mode = 8;
+    bool running = 9;
+    int32 pid = 10;
+    repeated NetworkInterface ifaces = 11;
+    map<string, string> labels = 12;
+}
+
+message NetworkInterface {
+    string name = 1;
+    string mac = 2;
+    repeated IPAddress addrs = 3;
+}
+
+message IPAddress {
+    string ip = 1;
+    string scope = 2;
+    string gateway = 3;
+}
+
+message WorkloadList {
+    repeated Workload workloads = 1;
+}
+
+message WorkloadEvent {
+    string agent_id = 1;
+    string event_type = 2;  // add, update, delete
+    Workload workload = 3;
+}
+
+// ============================================
+// 连接相关消息
+// ============================================
+
+message Connection {
+    string client_wl = 1;
+    string server_wl = 2;
+    bytes client_ip = 3;
+    bytes server_ip = 4;
+    uint32 client_port = 5;
+    uint32 server_port = 6;
+    uint32 ip_proto = 7;
+    uint32 application = 8;
+    uint64 bytes = 9;
+    uint32 sessions = 10;
+    uint32 first_seen_at = 11;
+    uint32 last_seen_at = 12;
+    uint32 threat_id = 13;
+    uint32 severity = 14;
+    uint32 policy_action = 15;
+    uint32 policy_id = 16;
+    bool ingress = 17;
+    bool external_peer = 18;
+    bool local_peer = 19;
+    string scope = 20;
+    string network = 21;
+    uint32 violates = 22;
+}
+
+message ConnectionReport {
+    string agent_id = 1;
+    string host_id = 2;
+    repeated Connection connections = 3;
+}
+
+// ============================================
+// 威胁相关消息
+// ============================================
+
+message ThreatLog {
+    string id = 1;
+    uint32 threat_id = 2;
+    string threat_name = 3;
+    string severity = 4;
+    string client_wl = 5;
+    string server_wl = 6;
+    bytes client_ip = 7;
+    bytes server_ip = 8;
+    uint32 server_port = 9;
+    uint32 ip_proto = 10;
+    bool pkt_ingress = 11;
+    bool local_peer = 12;
+    uint64 reported_at = 13;
+}
+
+message ThreatReport {
+    string agent_id = 1;
+    string host_id = 2;
+    repeated ThreatLog threats = 3;
+}
+
+// ============================================
+// 策略相关消息
+// ============================================
+
+message PolicyRule {
+    uint32 id = 1;
+    string from = 2;
+    string to = 3;
+    string ports = 4;
+    repeated uint32 applications = 5;
+    uint32 action = 6;  // 0=open, 1=allow, 2=deny, 3=violate
+    bool ingress = 7;
+    uint32 priority = 8;
+    bool disable = 9;
+    string comment = 10;
+}
+
+message IPRule {
+    uint32 id = 1;
+    bytes src_ip = 2;
+    bytes dst_ip = 3;
+    bytes src_mask = 4;
+    bytes dst_mask = 5;
+    uint32 port = 6;
+    uint32 port_r = 7;
+    uint32 ip_proto = 8;
+    uint32 action = 9;
+    bool ingress = 10;
+}
+
+message PolicyConfig {
+    string workload_id = 1;
+    repeated string macs = 2;
+    string mode = 3;
+    uint32 def_action = 4;
+    int32 apply_dir = 5;
+    repeated IPRule rules = 6;
+}
+
+message PolicyList {
+    repeated PolicyRule rules = 1;
+}
+
+message PolicyRequest {
+    string agent_id = 1;
+    repeated string workload_ids = 2;
+}
+
+// ============================================
+// 组相关消息
+// ============================================
+
+message GroupModeConfig {
+    string group_name = 1;
+    string mode = 2;  // Monitor, Protect
+}
+
+// ============================================
+// 子网相关消息
+// ============================================
+
+message Subnet {
+    bytes ip = 1;
+    bytes mask = 2;
+    string scope = 3;
+}
+
+message SubnetConfig {
+    repeated Subnet subnets = 1;
+}

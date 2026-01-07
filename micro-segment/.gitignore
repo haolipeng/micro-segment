@@ -1,0 +1,43 @@
+# 构建产物
+bin/
+*.o
+*.so
+*.a
+
+# Go
+*.exe
+*.test
+*.prof
+go.sum
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# 日志
+*.log
+
+# 配置
+*.local.yaml
+*.local.yml
+
+# Web
+web/node_modules/
+web/dist/
+web/.next/
+web/build/
+
+# 测试
+coverage.out
+*.test
+
+# 临时文件
+tmp/
+temp/
+.DS_Store
+
+# 依赖
+vendor/

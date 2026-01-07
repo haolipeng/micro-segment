@@ -1,0 +1,70 @@
+version: '3.8'
+
+services:
+  # etcd存储
+  etcd:
+    image: quay.io/coreos/etcd:v3.5.11
+    container_name: micro-segment-etcd
+    environment:
+      - ETCD_NAME=etcd0
+      - ETCD_ADVERTISE_CLIENT_URLS=http://etcd:2379
+      - ETCD_LISTEN_CLIENT_URLS=http://0.0.0.0:2379
+    ports:
+      - "2379:2379"
+    networks:
+      - micro-segment
+
+  # Controller
+  controller:
+    image: micro-segment-controller:latest
+    container_name: micro-segment-controller
+    depends_on:
+      - etcd
+    environment:
+      - STORAGE_TYPE=etcd
+      - STORAGE_ENDPOINTS=etcd:2379
+    ports:
+      - "8443:8443"   # REST API
+      - "8444:8444"   # gRPC
+      - "8080:8080"   # Web UI
+    volumes:
+      - ./configs/controller.yaml:/etc/micro-segment/controller.yaml
+    networks:
+      - micro-segment
+    command: ["-c", "/etc/micro-segment/controller.yaml"]
+
+  # Agent (需要特权模式访问容器运行时)
+  agent:
+    image: micro-segment-agent:latest
+    container_name: micro-segment-agent
+    depends_on:
+      - controller
+    privileged: true
+    pid: host
+    network_mode: host
+    environment:
+      - CONTROLLER_ENDPOINT=controller:8443
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /var/run/containerd/containerd.sock:/var/run/containerd/containerd.sock
+      - /tmp:/tmp
+      - ./configs/agent.yaml:/etc/micro-segment/agent.yaml
+    command: ["-c", "/etc/micro-segment/agent.yaml"]
+
+  # DP (数据平面，需要网络特权)
+  dp:
+    image: micro-segment-dp:latest
+    container_name: micro-segment-dp
+    privileged: true
+    network_mode: host
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    volumes:
+      - /tmp:/tmp
+      - ./configs/dp.conf:/etc/micro-segment/dp.conf
+    command: ["-c", "/etc/micro-segment/dp.conf"]
+
+networks:
+  micro-segment:
+    driver: bridge

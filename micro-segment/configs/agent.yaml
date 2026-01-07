@@ -1,0 +1,66 @@
+# Agent配置文件
+
+agent:
+  # Agent唯一标识（自动生成）
+  id: ""
+  
+  # Controller地址
+  controller_endpoint: "controller:8443"
+  
+  # DP Unix Socket路径
+  dp_socket: "/tmp/dp_listen.sock"
+  
+  # 容器运行时
+  runtime:
+    # 支持: docker, containerd
+    type: "docker"
+    socket: "/var/run/docker.sock"
+
+# 连接管理配置
+connection:
+  # connectionMap大小（扩大到131K）
+  map_size: 131072
+  
+  # 上报间隔（秒）
+  report_interval: 5
+  
+  # 批量上报大小
+  batch_size: 8192
+  
+  # 高优先级连接类型（VIOLATE, DENY）
+  high_priority_actions:
+    - "violate"
+    - "deny"
+
+# 策略配置
+policy:
+  # 策略缓存大小
+  cache_size: 10000
+  
+  # 策略更新超时（秒）
+  update_timeout: 30
+
+# 日志配置
+logging:
+  # 日志级别: debug, info, warn, error
+  level: "info"
+  
+  # 日志文件路径
+  file: "/var/log/micro-segment/agent.log"
+  
+  # 日志格式: json, text
+  format: "json"
+  
+  # 日志轮转
+  rotation:
+    max_size: 100    # MB
+    max_backups: 3
+    max_age: 7       # 天
+
+# 监控配置
+monitoring:
+  # Prometheus metrics端口
+  metrics_port: 9090
+  
+  # 健康检查端口
+  health_port: 9091
