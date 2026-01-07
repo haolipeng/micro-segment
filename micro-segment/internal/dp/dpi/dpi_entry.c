@@ -37,11 +37,7 @@ io_config_t *g_io_config;
 /* 每个DP线程的私有数据 */
 dpi_thread_data_t g_dpi_thread_data[MAX_DP_THREADS];
 
-/**
- * @brief DPI全局初始化（进程级别，只调用一次）
- * @param cb IO回调函数集合（send_packet等）
- * @param cfg IO配置参数
- */
+/* DPI全局初始化，设置IO回调和配置 */
 void dpi_setup(io_callback_t *cb, io_config_t *cfg)
 {
     g_io_callback = cb;
@@ -51,15 +47,7 @@ void dpi_setup(io_callback_t *cb, io_config_t *cfg)
     dpi_parser_setup();   /* 初始化协议解析器 */
 }
 
-/**
- * @brief DPI线程初始化（每个DP线程调用一次）
- * @param reason 初始化原因（预留参数）
- * 
- * 分配线程私有的数据包缓冲区，初始化各子模块：
- *   - defrag_data: IP分片重组缓冲区
- *   - asm_pkt: TCP流重组缓冲区
- *   - decoded_pkt: 解码后数据包缓冲区
- */
+/* DPI线程初始化，分配数据包缓冲区并初始化各子模块 */
 void dpi_init(int reason)
 {
     /* 分配IP分片重组缓冲区 */
@@ -100,13 +88,7 @@ void dpi_init(int reason)
     dpi_ip_fqdn_storage_init();       /* IP-FQDN映射存储 */
 }
 
-/**
- * @brief 在端点的应用映射表中查找应用
- * @param ep 端点指针
- * @param port 端口号
- * @param ip_proto IP协议号（TCP=6, UDP=17）
- * @return 找到返回io_app_t指针，否则返回NULL
- */
+/* 在端点应用映射表中查找指定端口和协议的应用 */
 io_app_t *dpi_ep_app_map_lookup(io_ep_t *ep, uint16_t port, uint8_t ip_proto)
 {
     io_app_t key;
@@ -116,15 +98,7 @@ io_app_t *dpi_ep_app_map_lookup(io_ep_t *ep, uint16_t port, uint8_t ip_proto)
     return rcu_map_lookup(&ep->app_map, &key);
 }
 
-/**
- * @brief 查找或创建端点的应用映射条目
- * @param ep 端点指针
- * @param port 端口号
- * @param ip_proto IP协议号
- * @return 应用条目指针，失败返回NULL
- * 
- * 如果应用不存在则自动创建新条目
- */
+/* 查找或创建端点的应用映射条目，不存在时自动创建 */
 static io_app_t *ep_app_map_locate(io_ep_t *ep, uint16_t port, uint8_t ip_proto)
 {
     io_app_t *app;
@@ -147,13 +121,7 @@ static io_app_t *ep_app_map_locate(io_ep_t *ep, uint16_t port, uint8_t ip_proto)
     return app;
 }
 
-/**
- * @brief 设置会话的应用层协议
- * @param p 数据包上下文
- * @param proto 协议标识（如HTTP、DNS等）
- * 
- * 仅对入站会话生效，用于DPI识别后更新应用信息
- */
+/* 设置会话的应用层协议，仅对入站会话生效 */
 void dpi_ep_set_proto(dpi_packet_t *p, uint16_t proto)
 {
     dpi_session_t *s = p->session;
@@ -172,11 +140,7 @@ void dpi_ep_set_proto(dpi_packet_t *p, uint16_t proto)
     }
 }
 
-/**
- * @brief 获取会话的应用类型
- * @param p 数据包上下文
- * @return 应用类型标识，未知返回0
- */
+/* 获取会话的应用类型标识 */
 uint16_t dpi_ep_get_app(dpi_packet_t *p)
 {
     dpi_session_t *s = p->session;
@@ -189,14 +153,7 @@ uint16_t dpi_ep_get_app(dpi_packet_t *p)
     return app->application;
 }
 
-/**
- * @brief 设置会话的服务器类型和应用类型
- * @param p 数据包上下文
- * @param server 服务器类型（如nginx、apache）
- * @param application 应用类型（如web、database）
- * 
- * 由DPI协议解析器调用，用于记录识别结果
- */
+/* 设置会话的服务器类型和应用类型，由DPI解析器调用 */
 void dpi_ep_set_app(dpi_packet_t *p, uint16_t server, uint16_t application)
 {
     dpi_session_t *s = p->session;
@@ -219,6 +176,7 @@ void dpi_ep_set_app(dpi_packet_t *p, uint16_t server, uint16_t application)
     }
 }
 
+/* 设置服务器版本信息到应用映射条目 */
 void dpi_ep_set_server_ver(dpi_packet_t *p, char *ver, int len)
 {
     dpi_session_t *s = p->session;
@@ -235,6 +193,7 @@ void dpi_ep_set_server_ver(dpi_packet_t *p, char *ver, int len)
     DEBUG_LOG(DBG_SESSION, p, "port=%u version=%s\n", s->server.port, app->version);
 }
 
+/* 打印内部子网、特殊IP和策略地址配置到日志文件 */
 void dpi_print_ip4_internal_fp(FILE *logfp)
 {
     int i;
@@ -259,15 +218,7 @@ void dpi_print_ip4_internal_fp(FILE *logfp)
     }
 }
 
-/**
- * @brief 判断IPv4地址是否为内部地址
- * @param ip 网络字节序的IPv4地址
- * @return true=内部地址，false=外部地址
- * 
- * 检查顺序：
- *   1. 回环地址(127.x.x.x)直接返回true
- *   2. 遍历内部子网列表进行匹配
- */
+/* 判断IPv4地址是否为内部地址，检查回环地址和内部子网列表 */
 bool dpi_is_ip4_internal(uint32_t ip)
 {
     int i;
@@ -286,6 +237,7 @@ bool dpi_is_ip4_internal(uint32_t ip)
     return false;
 }
 
+/* 获取IPv4地址的特殊IP类型（如云厂商、CDN等） */
 uint8_t dpi_ip4_iptype(uint32_t ip)
 {
     int i;
@@ -308,6 +260,7 @@ uint8_t dpi_ip4_iptype(uint32_t ip)
     return DP_IPTYPE_NONE;
 }
 
+/* 判断IP是否在策略地址映射表中 */
 bool dpi_is_policy_addr(uint32_t ip)
 {
     int i;
@@ -330,20 +283,14 @@ bool dpi_is_policy_addr(uint32_t ip)
     return false;
 }
 
+/* 比较MAC地址前缀是否匹配 */
 bool cmp_mac_prefix(void *m1, void *prefix)
 {
     if (!m1 || !prefix) return false;
     return *(uint32_t *)m1 == *(uint32_t *)prefix;
 }
 
-/**
- * @brief 向指定会话注入TCP RST包（阻断连接）
- * @param sess 目标会话
- * @param to_server true=发送给服务端，false=发送给客户端
- * 
- * 构造并发送TCP RST包，用于Protect模式下阻断违规连接。
- * 注意：TAP模式和ProxyMesh模式下不执行注入。
- */
+/* 向指定会话注入TCP RST包阻断连接，TAP和ProxyMesh模式下不执行 */
 void dpi_inject_reset_by_session(dpi_session_t *sess, bool to_server)
 {
     io_ctx_t ctx;
@@ -438,11 +385,7 @@ void dpi_inject_reset_by_session(dpi_session_t *sess, bool to_server)
     g_io_callback->send_packet(&ctx, buffer, sizeof(buffer));
 }
 
-/**
- * @brief 向数据包对应的会话注入TCP RST
- * @param p 数据包上下文
- * @param to_server 发送方向
- */
+/* 向数据包对应的会话注入TCP RST */
 void dpi_inject_reset(dpi_packet_t *p, bool to_server)
 {
     if (unlikely(p->session == NULL)) return;
@@ -450,18 +393,7 @@ void dpi_inject_reset(dpi_packet_t *p, bool to_server)
     dpi_inject_reset_by_session(p->session, to_server);
 }
 
-/**
- * @brief 判断NFQ模式下数据包的方向
- * @param p 数据包上下文
- * @return true=入站(ingress)，false=出站(egress)
- * 
- * 判断依据：
- *   1. 目的IP匹配端点IP → 入站
- *   2. 源IP匹配端点IP → 出站
- *   3. 目的端口有应用监听 → 入站
- *   4. 源端口有应用监听 → 出站
- *   5. 默认：目的端口 < 源端口 → 入站
- */
+/* 判断NFQ模式下数据包方向，通过IP匹配和端口应用判断入站/出站 */
 static bool nfq_packet_direction(dpi_packet_t *p)
 {
     io_app_t *app = NULL;
@@ -485,7 +417,7 @@ static bool nfq_packet_direction(dpi_packet_t *p)
     return p->dport < p->sport;
 }
 
-// return true if packet is ingress to "lo" i/f
+/* 判断ProxyMesh模式下lo接口数据包的方向 */
 static bool proxymesh_packet_direction(dpi_packet_t *p)
 {
     io_app_t *app = NULL;
@@ -517,7 +449,8 @@ static bool proxymesh_packet_direction(dpi_packet_t *p)
     return false;
 }
 
-//return value is only used by nfq, 0 means accept, 1 drop
+/* 数据包接收主入口，执行端点查找、方向判断、DPI检测和策略决策
+ * 支持TC/NFQ/TAP/ProxyMesh模式，NFQ模式返回0=放行/1=丢弃 */
 int dpi_recv_packet(io_ctx_t *ctx, uint8_t *ptr, int len)
 {
     int action;
@@ -526,6 +459,7 @@ int dpi_recv_packet(io_ctx_t *ctx, uint8_t *ptr, int len)
 
     th_snap.tick = ctx->tick;
 
+    /* 清空线程私有的数据包结构（保留缓冲区指针） */
     memset(&th_packet, 0, offsetof(dpi_packet_t, EOZ));
 
     th_packet.decoded_pkt.len = 0;
@@ -536,6 +470,7 @@ int dpi_recv_packet(io_ctx_t *ctx, uint8_t *ptr, int len)
 
     rcu_read_lock();
 
+    /* 获取线程本地的配置副本（RCU保护） */
     th_internal_subnet4 = g_internal_subnet4;
     th_policy_addr = g_policy_addr;
     th_specialip_subnet4 = g_specialip_subnet4;
@@ -543,30 +478,30 @@ int dpi_recv_packet(io_ctx_t *ctx, uint8_t *ptr, int len)
     th_disable_net_policy = g_disable_net_policy;
     th_detect_unmanaged_wl = g_detect_unmanaged_wl;
 
+    /* 解析以太网头，查找工作负载端点 */
     if (likely(th_packet.cap_len >= sizeof(struct ethhdr))) {
         struct ethhdr *eth = (struct ethhdr *)(th_packet.pkt + th_packet.l2);
         io_mac_t *mac = NULL;
 
-        // Lookup workloads
+        /* 根据不同模式查找端点 */
         if (!ctx->tc) {
-            // NON-TC mode just fwd the mcast/bcast mac packet
+            /* 非TC模式：直接转发广播/组播包 */
             if (is_mac_m_b_cast(eth->h_dest)) {
                 rcu_read_unlock();
                 if (!tap && nfq) {
-                    //bypass nfq in case of multicast or broadcast
-                    return 0;
+                    return 0;  /* NFQ模式放行 */
                 }
                 g_io_callback->send_packet(ctx, ptr, len);
                 return 0;
             }
  
-            // in case of quarantine for NON-TC mode we cannot rely on tc rule
-            // reset to drop traffic, so we stop send_packet to its peer ctx
+            /* 隔离模式下丢弃流量 */
             if (ctx->quar) {
                 rcu_read_unlock();
                 return 1;
             }
 
+            /* 通过MAC地址查找端点并判断方向 */
             if (mac_cmp(eth->h_source, ctx->ep_mac.ether_addr_octet)) {
                 mac = rcu_map_lookup(&g_ep_map, &eth->h_source);
             } else if (mac_cmp(eth->h_dest, ctx->ep_mac.ether_addr_octet)) { 
@@ -574,33 +509,31 @@ int dpi_recv_packet(io_ctx_t *ctx, uint8_t *ptr, int len)
                 th_packet.flags |= DPI_PKT_FLAG_INGRESS;
             } 
         } else if (cmp_mac_prefix(eth->h_source, MAC_PREFIX)) { 
+            /* TC模式：通过MAC前缀识别NeuVector管理的接口 */
             mac = rcu_map_lookup(&g_ep_map, &eth->h_source);
         } else if (cmp_mac_prefix(eth->h_dest, MAC_PREFIX)) { 
             mac = rcu_map_lookup(&g_ep_map, &eth->h_dest);
             th_packet.flags |= DPI_PKT_FLAG_INGRESS;
         } else
-        // For tapped port
-        //check dst mac first because src mac may == dst mac for ingress
+        /* TAP模式：通过上下文中的MAC地址匹配 */
         if (mac_cmp(eth->h_dest, ctx->ep_mac.ether_addr_octet)) { 
             mac = rcu_map_lookup(&g_ep_map, &eth->h_dest);
             th_packet.flags |= DPI_PKT_FLAG_INGRESS;
         } else if (mac_cmp(eth->h_source, ctx->ep_mac.ether_addr_octet)) {
             mac = rcu_map_lookup(&g_ep_map, &eth->h_source);
         }  else if (cmp_mac_prefix(ctx->ep_mac.ether_addr_octet, PROXYMESH_MAC_PREFIX)) {
-            /*
-             * proxymesh injects its proxy service as a sidecar into POD, 
-             * ingress/egress traffic will be redirected to proxy, "lo"
-             * interface is monitored to inspect traffic from and to proxy.
-             */
+            /* ProxyMesh模式：监控lo接口的sidecar流量 */
             mac = rcu_map_lookup(&g_ep_map, &ctx->ep_mac.ether_addr_octet);
             isproxymesh = true;
             if (th_session4_proxymesh_map.map == NULL) {
                 dpi_session_proxymesh_init();
             }
         } else if (nfq) {
-            //cilium ep use nfq in protect mode
+            /* NFQ模式（Cilium等场景） */
             mac = rcu_map_lookup(&g_ep_map, &ctx->ep_mac.ether_addr_octet);
         }
+
+        /* 找到端点，初始化数据包上下文 */
         if (likely(mac != NULL)) {
             tap = mac->ep->tap;
 
@@ -620,6 +553,7 @@ int dpi_recv_packet(io_ctx_t *ctx, uint8_t *ptr, int len)
                 }
             }
 
+            /* 更新流量统计（非ProxyMesh和NFQ模式） */
             if (!isproxymesh && !nfq) {
                 if (th_packet.flags & DPI_PKT_FLAG_INGRESS) {
                     th_packet.ep_all_metry = &th_packet.ep_stats->in;
@@ -639,6 +573,7 @@ int dpi_recv_packet(io_ctx_t *ctx, uint8_t *ptr, int len)
                 dpi_inc_stats_packet(&th_packet);
             }
         } else if (g_io_config->promisc) {
+            /* 混杂模式：使用虚拟端点处理未知流量 */
             th_packet.ctx = ctx;
             th_packet.flags |= (DPI_PKT_FLAG_INGRESS | DPI_PKT_FLAG_FAKE_EP);
             th_packet.ep = g_io_config->dummy_mac.ep;
@@ -650,29 +585,25 @@ int dpi_recv_packet(io_ctx_t *ctx, uint8_t *ptr, int len)
             tap = ctx->tap;
         } else {
             rcu_read_unlock();
-            // If not in promisc mode, ignore flooded mac-mismatched pkts 
-            //bypass nfq
+            /* 非混杂模式忽略未知MAC的数据包 */
             return 0;
 
         }
     }
 
-    // Parse after figuring out direction so that if there is any threat in the packet
-    // it can be logged correctly
+    /* 解析以太网层协议 */
     action = dpi_parse_ethernet(&th_packet);
     if (unlikely(action == DPI_ACTION_DROP || action == DPI_ACTION_RESET)) {
         rcu_read_unlock();
         if (th_packet.frag_trac != NULL) {
             dpi_frag_discard(th_packet.frag_trac);
         }
-        //no drop based on l2 decision because
-        //nfq packet's l2 header is fake
         return 0;
     }
 
+    /* ProxyMesh和NFQ模式需要重新判断方向 */
     if (isproxymesh || nfq) {
         if (isproxymesh) {
-            //direction WRT "lo" i/f is opsite WRT to WL ep
             if (!proxymesh_packet_direction(&th_packet)) {
                 th_packet.flags |= DPI_PKT_FLAG_INGRESS;
             }
@@ -699,7 +630,7 @@ int dpi_recv_packet(io_ctx_t *ctx, uint8_t *ptr, int len)
         dpi_inc_stats_packet(&th_packet);
     }
     
-    // Bypass broadcast, multicast and non-ip packet
+    /* 跳过广播、组播和非IP数据包的深度检测 */
     struct iphdr *iph;
     struct ip6_hdr *ip6h;
     switch (th_packet.eth_type) {
@@ -720,22 +651,24 @@ int dpi_recv_packet(io_ctx_t *ctx, uint8_t *ptr, int len)
         break;
     }
          
+    /* 执行DPI深度检测 */
     if (action == DPI_ACTION_NONE && inspect) {
         IF_DEBUG_LOG(DBG_PACKET, &th_packet) {
             debug_dump_packet(&th_packet);
         }
-        action = dpi_inspect_ethernet(&th_packet);
+        action = dpi_inspect_ethernet(&th_packet);  /* 核心检测逻辑 */
         DEBUG_LOG(DBG_PACKET, NULL, "action=%d tap=%d inspect=%d\n",
                   action, tap, inspect);
     }
 
     rcu_read_unlock();
 
+    /* 根据检测结果处理数据包 */
     if (likely(!tap && action != DPI_ACTION_DROP && action != DPI_ACTION_RESET &&
                action != DPI_ACTION_BLOCK)) {
+        /* 放行：转发数据包 */
         if (!tap && nfq) {
-            //nfq accept after inspect l4/7 
-            return 0;
+            return 0;  /* NFQ模式返回0表示放行 */
         }
         if (th_packet.frag_trac != NULL) {
             dpi_frag_send(th_packet.frag_trac, ctx);
@@ -743,29 +676,29 @@ int dpi_recv_packet(io_ctx_t *ctx, uint8_t *ptr, int len)
             g_io_callback->send_packet(ctx, ptr, len);
         }
     } else {
+        /* 丢弃或阻断 */
         if (th_packet.frag_trac != NULL) {
             dpi_frag_discard(th_packet.frag_trac);
         }
         if (!tap && nfq) {
-            //nfq drop after inspect l4/7 
-            return 1;
+            return 1;  /* NFQ模式返回1表示丢弃 */
         }
     }
     return 0;
 }
 
+/* 定时器处理函数，驱动定时器轮转动，触发会话超时清理等定时任务 */
 void dpi_timeout(uint32_t tick)
 {
     th_snap.tick = tick;
 
+    /* 首次调用时启动定时器轮 */
     if (unlikely(!timer_wheel_started(&th_timer))) {
         timer_wheel_start(&th_timer, tick);
     }
 
-    //DEBUG_LOG(DBG_TIMER, NULL, "tick=%u\n", tick);
-
     rcu_read_lock();
-    uint32_t cnt = timer_wheel_roll(&th_timer, tick);
+    uint32_t cnt = timer_wheel_roll(&th_timer, tick);  /* 转动定时器轮 */
     rcu_read_unlock();
 
     if (cnt > 0) {
