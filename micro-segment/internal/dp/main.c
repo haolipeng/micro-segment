@@ -1,3 +1,14 @@
+/**
+ * @file main.c
+ * @brief DP主程序 - 数据平面进程入口
+ * 
+ * 微隔离DP进程的主程序，负责：
+ *   - 多线程初始化和管理
+ *   - 信号处理和优雅退出
+ *   - 端点映射表管理
+ *   - 控制循环和数据处理线程协调
+ */
+
 // Simplified DP main program for micro-segment
 // Removed: pcap support, shared memory, complex initialization
 
@@ -16,14 +27,14 @@
 #include "apis.h"
 #include "utils/helper.h"
 
-// 时间函数
+/* 获取当前时间戳（秒级） */
 static inline uint32_t get_current_time(void) {
     struct timespec ts;
     clock_gettime(CLOCK_REALTIME, &ts);
     return ts.tv_sec;
 }
 
-// 虚拟端点初始化
+/* 虚拟端点初始化，简化实现 */
 static void init_dummy_ep(void *ep) {
     // 简化实现，仅用于编译
     (void)ep;
@@ -62,7 +73,7 @@ pthread_mutex_t g_debug_lock;
 io_callback_t g_callback;
 io_config_t g_config;
 
-// Signal handlers
+/* SIGUSR1信号处理：转储策略信息到所有工作线程 */
 static void dp_signal_dump_policy(int num)
 {
     int thr_id;
@@ -71,12 +82,13 @@ static void dp_signal_dump_policy(int num)
     }
 }
 
+/* 退出信号处理：设置全局退出标志 */
 static void dp_signal_exit(int num)
 {
     g_running = false;
 }
 
-// Debug functions
+/* 生成调试时间戳前缀 */
 static inline int debug_ts(FILE *logfp)
 {
     struct timeval now;
@@ -95,6 +107,7 @@ static inline int debug_ts(FILE *logfp)
                    tm->tm_hour, tm->tm_min, tm->tm_sec, THREAD_NAME);
 }
 
+/* 标准输出调试函数，带线程安全锁 */
 static int debug_stdout(bool print_ts, const char *fmt, va_list args)
 {
     int len = 0;
@@ -109,6 +122,7 @@ static int debug_stdout(bool print_ts, const char *fmt, va_list args)
     return len;
 }
 
+/* 文件调试函数，输出到日志文件 */
 int debug_file(bool print_ts, const char *fmt, va_list args)
 {
     static FILE *logfp = NULL;
@@ -133,7 +147,7 @@ int debug_file(bool print_ts, const char *fmt, va_list args)
     return len;
 }
 
-// Main network processing
+/* 网络处理主循环，创建定时器和数据处理线程 */
 static int net_run(void)
 {
     pthread_t timer_thr;
@@ -192,7 +206,7 @@ static int net_run(void)
     return 0;
 }
 
-// EP map functions
+/* 端点MAC地址匹配函数，用于哈希表查找 */
 static int dp_ep_match(struct cds_lfht_node *ht_node, const void *key)
 {
     io_mac_t *ht_mac = STRUCT_OF(ht_node, io_mac_t, node);
@@ -200,12 +214,13 @@ static int dp_ep_match(struct cds_lfht_node *ht_node, const void *key)
     return memcmp(mac, &ht_mac->mac, sizeof(ht_mac->mac)) == 0 ? 1 : 0;
 }
 
+/* 端点MAC地址哈希函数 */
 static uint32_t dp_ep_hash(const void *key)
 {
     return sdbm_hash(key, ETH_ALEN);
 }
 
-// Help
+/* 显示程序帮助信息 */
 static void help(const char *prog)
 {
     printf("Micro-Segment DP (Data Plane)\n\n");
@@ -218,7 +233,7 @@ static void help(const char *prog)
     printf("\n");
 }
 
-// Main
+/* DP进程主函数，解析参数、初始化系统并启动网络处理 */
 int main(int argc, char *argv[])
 {
     int arg = 0;

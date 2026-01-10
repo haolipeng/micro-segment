@@ -1,3 +1,15 @@
+/**
+ * @file defs.h
+ * @brief 基础定义文件 - Agent和Controller共享的常量定义
+ * 
+ * 定义Agent和DP进程间共享的常量和枚举：
+ *   - DPI动作类型和威胁严重级别
+ *   - 会话状态和应用协议标识
+ *   - 威胁检测ID和解析器类型
+ *   - 消息类型和数据结构
+ *   - 会话标志位定义
+ */
+
 #ifndef __DEFS_H__
 #define __DEFS_H__
 
@@ -8,21 +20,24 @@
 
 #define DP_MSG_SIZE 8192
 
-#define DPI_ACTION_NONE   0
-#define DPI_ACTION_ALLOW  1
-#define DPI_ACTION_DROP   2
-#define DPI_ACTION_RESET  3
-#define DPI_ACTION_BYPASS 4
-#define DPI_ACTION_BLOCK  5
+/* DPI处理动作定义 */
+#define DPI_ACTION_NONE   0     /* 无动作 */
+#define DPI_ACTION_ALLOW  1     /* 允许通过 */
+#define DPI_ACTION_DROP   2     /* 丢弃数据包 */
+#define DPI_ACTION_RESET  3     /* 发送RST重置连接 */
+#define DPI_ACTION_BYPASS 4     /* 绕过后续检测 */
+#define DPI_ACTION_BLOCK  5     /* 阻断会话 */
 #define DPI_ACTION_MAX    6
 
-#define THRT_SEVERITY_INFO     1
-#define THRT_SEVERITY_LOW      2
-#define THRT_SEVERITY_MEDIUM   3
-#define THRT_SEVERITY_HIGH     4
-#define THRT_SEVERITY_CRITICAL 5
+/* 威胁严重级别定义 */
+#define THRT_SEVERITY_INFO     1    /* 信息级别 */
+#define THRT_SEVERITY_LOW      2    /* 低危 */
+#define THRT_SEVERITY_MEDIUM   3    /* 中危 */
+#define THRT_SEVERITY_HIGH     4    /* 高危 */
+#define THRT_SEVERITY_CRITICAL 5    /* 严重 */
 #define THRT_SEVERITY_MAX      6
 
+/* TCP会话状态定义（对应标准TCP状态） */
 #define SESS_STATE_NONE        0
 #define SESS_STATE_ESTABLISHED TCP_ESTABLISHED
 #define SESS_STATE_SYN_SENT    TCP_SYN_SENT
@@ -36,6 +51,7 @@
 #define SESS_STATE_LISTEN      TCP_LISTEN
 #define SESS_STATE_CLOSING     TCP_CLOSING
 
+/* 基础应用协议标识 */
 #define DPI_APP_BASE_START            DPI_APP_HTTP
 #define DPI_APP_HTTP                  1001
 #define DPI_APP_SSL                   1002
@@ -48,6 +64,7 @@
 #define DPI_APP_RTSP                  1009
 #define DPI_APP_SIP                   1010
 
+/* 应用服务协议标识 */
 #define DPI_APP_PROTO_MARK            DPI_APP_MYSQL
 #define DPI_APP_MYSQL                 2001
 #define DPI_APP_REDIS                 2002
@@ -73,17 +90,16 @@
 #define DPI_APP_NGINX                 2022
 #define DPI_APP_JETTY                 2023
 #define DPI_APP_NODEJS                2024
-#define DPI_APP_ERLANG_EPMD           2025 //no erlang epmd application expose, it will transfer to application couchbase/couchdb/rabbitmq, etc.
-#define DPI_APP_TNS                   2026
-#define DPI_APP_TDS                   2027
+#define DPI_APP_ERLANG_EPMD           2025 /* Erlang端口映射守护进程 */
+#define DPI_APP_TNS                   2026 /* Oracle TNS */
+#define DPI_APP_TDS                   2027 /* Microsoft TDS */
 #define DPI_APP_GRPC                  2028
 #define DPI_APP_MAX                   2029
 
-#define DPI_APP_UNKNOWN               0
-#define DPI_APP_NOT_CHECKED           1    //just for report purpose
+#define DPI_APP_UNKNOWN               0    /* 未知应用 */
+#define DPI_APP_NOT_CHECKED           1    /* 未检测（仅用于报告） */
 
-// Exposed for debug purpose, if need to change the order, should create a map
-// between exposed and dp internal values
+/* 协议解析器类型定义 */
 #define DPI_PARSER_HTTP               0
 #define DPI_PARSER_SSL                1
 #define DPI_PARSER_SSH                2
@@ -106,98 +122,100 @@
 #define DPI_PARSER_GRPC               19
 #define DPI_PARSER_MAX                20
 
-// Volume based
-#define THRT_ID_SYN_FLOOD       1001
-#define THRT_ID_ICMP_FLOOD      1002
-#define THRT_ID_IP_SRC_SESSION  1003
+/* 基于流量的威胁检测ID */
+#define THRT_ID_SYN_FLOOD       1001    /* SYN洪水攻击 */
+#define THRT_ID_ICMP_FLOOD      1002    /* ICMP洪水攻击 */
+#define THRT_ID_IP_SRC_SESSION  1003    /* IP源会话异常 */
 
-// Pattern based
-#define THRT_ID_BAD_PACKET           2001
-#define THRT_ID_IP_TEARDROP          2002
-#define THRT_ID_TCP_SYN_DATA         2003
-#define THRT_ID_TCP_SPLIT_HDSHK      2004
-#define THRT_ID_TCP_NODATA           2005
-#define THRT_ID_PING_DEATH           2006
-#define THRT_ID_DNS_LOOP_PTR         2007
-#define THRT_ID_SSH_VER_1            2008
-#define THRT_ID_SSL_HEARTBLEED       2009
-#define THRT_ID_SSL_CIPHER_OVF       2010
-#define THRT_ID_SSL_VER_2OR3         2011
-#define THRT_ID_SSL_TLS_1DOT0        2012
-#define THRT_ID_HTTP_NEG_LEN         2013
-#define THRT_ID_HTTP_SMUGGLING       2014
-#define THRT_ID_HTTP_SLOWLORIS       2015
-#define THRT_ID_TCP_SMALL_WINDOW     2016
-#define THRT_ID_DNS_OVERFLOW         2017
-#define THRT_ID_MYSQL_ACCESS_DENY    2018
-#define THRT_ID_DNS_ZONE_TRANSFER    2019
-#define THRT_ID_ICMP_TUNNELING       2020
-#define THRT_ID_DNS_TYPE_NULL        2021
-#define THRT_ID_SQL_INJECTION        2022
-#define THRT_ID_APACHE_STRUTS_RCE    2023
-#define THRT_ID_DNS_TUNNELING        2024
-#define THRT_ID_TCP_SMALL_MSS        2025
-#define THRT_ID_K8S_EXTIP_MITM       2026
-#define THRT_ID_SSL_TLS_1DOT1        2027
+/* 基于模式的威胁检测ID */
+#define THRT_ID_BAD_PACKET           2001    /* 恶意数据包 */
+#define THRT_ID_IP_TEARDROP          2002    /* IP分片攻击 */
+#define THRT_ID_TCP_SYN_DATA         2003    /* TCP SYN数据攻击 */
+#define THRT_ID_TCP_SPLIT_HDSHK      2004    /* TCP分割握手攻击 */
+#define THRT_ID_TCP_NODATA           2005    /* TCP无数据攻击 */
+#define THRT_ID_PING_DEATH           2006    /* Ping死亡攻击 */
+#define THRT_ID_DNS_LOOP_PTR         2007    /* DNS循环指针攻击 */
+#define THRT_ID_SSH_VER_1            2008    /* SSH版本1漏洞 */
+#define THRT_ID_SSL_HEARTBLEED       2009    /* SSL心脏滴血漏洞 */
+#define THRT_ID_SSL_CIPHER_OVF       2010    /* SSL密码溢出 */
+#define THRT_ID_SSL_VER_2OR3         2011    /* SSL版本2/3漏洞 */
+#define THRT_ID_SSL_TLS_1DOT0        2012    /* TLS 1.0漏洞 */
+#define THRT_ID_HTTP_NEG_LEN         2013    /* HTTP负长度攻击 */
+#define THRT_ID_HTTP_SMUGGLING       2014    /* HTTP走私攻击 */
+#define THRT_ID_HTTP_SLOWLORIS       2015    /* HTTP慢速攻击 */
+#define THRT_ID_TCP_SMALL_WINDOW     2016    /* TCP小窗口攻击 */
+#define THRT_ID_DNS_OVERFLOW         2017    /* DNS溢出攻击 */
+#define THRT_ID_MYSQL_ACCESS_DENY    2018    /* MySQL访问拒绝 */
+#define THRT_ID_DNS_ZONE_TRANSFER    2019    /* DNS区域传输攻击 */
+#define THRT_ID_ICMP_TUNNELING       2020    /* ICMP隧道攻击 */
+#define THRT_ID_DNS_TYPE_NULL        2021    /* DNS空类型攻击 */
+#define THRT_ID_SQL_INJECTION        2022    /* SQL注入攻击 */
+#define THRT_ID_APACHE_STRUTS_RCE    2023    /* Apache Struts RCE */
+#define THRT_ID_DNS_TUNNELING        2024    /* DNS隧道攻击 */
+#define THRT_ID_TCP_SMALL_MSS        2025    /* TCP小MSS攻击 */
+#define THRT_ID_K8S_EXTIP_MITM       2026    /* K8s外部IP中间人攻击 */
+#define THRT_ID_SSL_TLS_1DOT1        2027    /* TLS 1.1漏洞 */
 #define THRT_ID_MAX                  2028
 
 
-// --- messages
-// Message format shares between processes in agent, which is upgraded together,
-// value can be changed.
+/* DP消息类型定义 */
+#define DP_KIND_APP_UPDATE              1    /* 应用更新消息 */
+#define DP_KIND_SESSION_LIST            2    /* 会话列表消息 */
+#define DP_KIND_SESSION_COUNT           3    /* 会话计数消息 */
+#define DP_KIND_DEVICE_COUNTER          4    /* 设备计数器消息 */
+#define DP_KIND_METER_LIST              5    /* 流量计量列表消息 */
+#define DP_KIND_THREAT_LOG              6    /* 威胁日志消息 */
+#define DP_KIND_CONNECTION              7    /* 连接消息 */
+#define DP_KIND_MAC_STATS               8    /* MAC统计消息 */
+#define DP_KIND_DEVICE_STATS            9    /* 设备统计消息 */
+#define DP_KIND_KEEP_ALIVE              10   /* 心跳保活消息 */
+#define DP_KIND_FQDN_UPDATE             11   /* FQDN更新消息 */
+#define DP_KIND_IP_FQDN_STORAGE_UPDATE  12   /* IP-FQDN存储更新 */
+#define DP_KIND_IP_FQDN_STORAGE_RELEASE 13   /* IP-FQDN存储释放 */
 
-#define DP_KIND_APP_UPDATE              1
-#define DP_KIND_SESSION_LIST            2
-#define DP_KIND_SESSION_COUNT           3
-#define DP_KIND_DEVICE_COUNTER          4
-#define DP_KIND_METER_LIST              5
-#define DP_KIND_THREAT_LOG              6
-#define DP_KIND_CONNECTION              7
-#define DP_KIND_MAC_STATS               8
-#define DP_KIND_DEVICE_STATS            9
-#define DP_KIND_KEEP_ALIVE              10
-#define DP_KIND_FQDN_UPDATE             11
-#define DP_KIND_IP_FQDN_STORAGE_UPDATE  12
-#define DP_KIND_IP_FQDN_STORAGE_RELEASE 13
-
+/* DP消息头结构 */
 typedef struct {
-    uint8_t  Kind;
-    uint8_t  More;
-    uint16_t Length;   // DPMsgHdr + Msg
+    uint8_t  Kind;      /* 消息类型 */
+    uint8_t  More;      /* 是否有更多消息 */
+    uint16_t Length;    /* 消息长度（包含头部） */
 } DPMsgHdr;
 
+/* 应用信息消息结构 */
 typedef struct {
-    uint16_t Port;
-    uint16_t Proto;
-    uint16_t Server;
-    uint16_t Application;
-    uint8_t  IPProto;
+    uint16_t Port;          /* 端口号 */
+    uint16_t Proto;         /* 协议类型 */
+    uint16_t Server;        /* 服务器类型 */
+    uint16_t Application;   /* 应用类型 */
+    uint8_t  IPProto;       /* IP协议号 */
 } DPMsgApp;
 
+/* 应用消息头结构 */
 typedef struct {
-    uint8_t  MAC[6];
-    uint16_t Ports;
-    // DPMsgApp Apps[0];
+    uint8_t  MAC[6];        /* MAC地址 */
+    uint16_t Ports;         /* 端口数量 */
+    // DPMsgApp Apps[0];    /* 应用列表 */
 } DPMsgAppHdr;
 
+/* 会话计数消息结构 */
 typedef struct {
-    uint32_t CurSess;
-    uint32_t CurTCPSess;
-    uint32_t CurUDPSess;
-    uint32_t CurICMPSess;
-    uint32_t CurIPSess;
+    uint32_t CurSess;       /* 当前总会话数 */
+    uint32_t CurTCPSess;    /* 当前TCP会话数 */
+    uint32_t CurUDPSess;    /* 当前UDP会话数 */
+    uint32_t CurICMPSess;   /* 当前ICMP会话数 */
+    uint32_t CurIPSess;     /* 当前IP会话数 */
 } DPMsgSessionCount;
 
-#define DPSESS_FLAG_INGRESS       0x0001
-#define DPSESS_FLAG_TAP           0x0002
-#define DPSESS_FLAG_MID           0x0004
-#define DPSESS_FLAG_EXTERNAL      0x0008 // remote peer is not local
-#define DPSESS_FLAG_XFF           0x0010 // virtual xff connection
-#define DPSESS_FLAG_SVC_EXTIP     0x0020 // service externalIP
-#define DPSESS_FLAG_MESH_TO_SVR   0x0040 // mesh traffic to svr
-#define DPSESS_FLAG_LINK_LOCAL    0x0080 // link local(169.254.0.0)
-#define DPSESS_FLAG_TMP_OPEN      0x0100 // temp open connection
-#define DPSESS_FLAG_UWLIP         0x0200 // uwl connection
+/* 会话标志位定义 */
+#define DPSESS_FLAG_INGRESS       0x0001    /* 入站会话 */
+#define DPSESS_FLAG_TAP           0x0002    /* TAP模式会话 */
+#define DPSESS_FLAG_MID           0x0004    /* 中间状态会话 */
+#define DPSESS_FLAG_EXTERNAL      0x0008    /* 外部对等端 */
+#define DPSESS_FLAG_XFF           0x0010    /* 虚拟XFF连接 */
+#define DPSESS_FLAG_SVC_EXTIP     0x0020    /* 服务外部IP */
+#define DPSESS_FLAG_MESH_TO_SVR   0x0040    /* 网格到服务器流量 */
+#define DPSESS_FLAG_LINK_LOCAL    0x0080    /* 链路本地地址 */
+#define DPSESS_FLAG_TMP_OPEN      0x0100    /* 临时开放连接 */
+#define DPSESS_FLAG_UWLIP         0x0200    /* 未管理工作负载连接 */
 #define DPSESS_FLAG_CHK_NBE       0x0400 // check nbe
 #define DPSESS_FLAG_NBE_SNS       0x0800 // same ns nbe
 

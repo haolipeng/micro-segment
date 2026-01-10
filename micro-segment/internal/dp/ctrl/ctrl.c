@@ -1,3 +1,15 @@
+/**
+ * @file ctrl.c
+ * @brief DP控制通道 - Agent与DP进程间的通信接口
+ * 
+ * 实现Agent和DP进程之间的控制消息处理：
+ *   - Unix域套接字通信
+ *   - JSON消息解析和响应
+ *   - 端口管理（TAP、NFQ、服务端口）
+ *   - 端点配置和应用映射
+ *   - 统计信息查询
+ */
+
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -54,6 +66,7 @@ static struct sockaddr_un g_ctrl_notify_addr;
 
 static uint8_t g_notify_msg[DP_MSG_SIZE];
 
+/* 创建通知客户端套接字，用于主动向Controller发送消息 */
 static int make_notify_client(const char *filename)
 {
     int sock;
@@ -69,7 +82,7 @@ static int make_notify_client(const char *filename)
     return sock;
 }
 
-// Send binary message actively to ctrl path
+/* 主动向Controller发送二进制消息 */
 static int dp_ctrl_notify_ctrl(void *data, int len)
 {
     socklen_t addr_len = sizeof(struct sockaddr_un);
@@ -78,6 +91,7 @@ static int dp_ctrl_notify_ctrl(void *data, int len)
     return sent;
 }
 
+/* 创建Unix域套接字服务端 */
 static int make_named_socket(const char *filename)
 {
     struct sockaddr_un name;
@@ -101,7 +115,7 @@ static int make_named_socket(const char *filename)
     return sock;
 }
 
-// Send json message to client socket as response
+/* 向客户端发送JSON响应消息 */
 int dp_ctrl_send_json(json_t *root)
 {
     if (root == NULL) {
@@ -131,7 +145,7 @@ int dp_ctrl_send_json(json_t *root)
     return sent;
 }
 
-// Send binary message to client socket as response
+/* 向客户端发送二进制响应消息 */
 int dp_ctrl_send_binary(void *data, int len)
 {
     socklen_t addr_len = sizeof(struct sockaddr_un);
@@ -141,6 +155,7 @@ int dp_ctrl_send_binary(void *data, int len)
     return sent;
 }
 
+/* 处理心跳保活消息 */
 static int dp_ctrl_keep_alive(json_t *msg)
 {
     uint32_t seq_num = json_integer_value(json_object_get(msg, "seq_num"));
@@ -158,6 +173,7 @@ static int dp_ctrl_keep_alive(json_t *msg)
     return 0;
 }
 
+/* 添加TAP端口，用于监控模式 */
 static int dp_ctrl_add_tap_port(json_t *msg)
 {
     const char *netns, *iface, *ep_mac;
@@ -170,6 +186,7 @@ static int dp_ctrl_add_tap_port(json_t *msg)
     return dp_data_add_tap(netns, iface, ep_mac, 0);
 }
 
+/* 删除TAP端口 */
 static int dp_ctrl_del_tap_port(json_t *msg)
 {
     const char *netns, *iface;
@@ -181,6 +198,7 @@ static int dp_ctrl_del_tap_port(json_t *msg)
     return dp_data_del_tap(netns, iface, 0);
 }
 
+/* 添加NFQUEUE端口，用于保护模式 */
 static int dp_ctrl_add_nfq_port(json_t *msg)
 {
     const char *netns, *iface, *ep_mac;
@@ -203,6 +221,7 @@ static int dp_ctrl_add_nfq_port(json_t *msg)
     return dp_data_add_nfq(netns, iface, qnum, ep_mac, jumboframe, 0);
 }
 
+/* 删除NFQUEUE端口 */
 static int dp_ctrl_del_nfq_port(json_t *msg)
 {
     const char *netns, *iface;
@@ -214,6 +233,7 @@ static int dp_ctrl_del_nfq_port(json_t *msg)
     return dp_data_del_nfq(netns, iface, 0);
 }
 
+/* 添加服务端口 */
 static int dp_ctrl_add_srvc_port(json_t *msg)
 {
     const char *iface;
@@ -231,6 +251,7 @@ static int dp_ctrl_add_srvc_port(json_t *msg)
     return dp_data_add_port(iface, jumboframe, 0);
 }
 
+/* 删除服务端口 */
 static int dp_ctrl_del_srvc_port(json_t *msg)
 {
     const char *iface;
@@ -241,6 +262,7 @@ static int dp_ctrl_del_srvc_port(json_t *msg)
     return dp_data_del_port(iface, 0);
 }
 
+/* 添加端口对，用于TC流量捕获 */
 static int dp_ctrl_add_port_pair(json_t *msg)
 {
     const char *vex_iface, *vin_iface, *ep_mac;
@@ -259,6 +281,7 @@ static int dp_ctrl_add_port_pair(json_t *msg)
     return dp_data_add_port_pair(vin_iface, vex_iface, ep_mac, quar, 0);
 }
 
+/* 删除端口对 */
 static int dp_ctrl_del_port_pair(json_t *msg)
 {
     const char *vex_iface, *vin_iface;
@@ -269,12 +292,14 @@ static int dp_ctrl_del_port_pair(json_t *msg)
     return dp_data_del_port_pair(vin_iface, vex_iface, 0);
 }
 
+/* 端点应用哈希函数 */
 static uint32_t ep_app_hash(const void *key)
 {
     const io_app_t *app = key;
     return app->port ^ app->ip_proto;
 }
 
+/* 端点应用匹配函数 */
 static int ep_app_match(struct cds_lfht_node *ht_node, const void *key)
 {
     io_app_t *app = STRUCT_OF(ht_node, io_app_t, node);
@@ -282,6 +307,7 @@ static int ep_app_match(struct cds_lfht_node *ht_node, const void *key)
     return app->port == k->port && app->ip_proto == k->ip_proto;
 }
 
+/* 销毁端点IP列表 */
 static void dp_pips_destroy(io_ep_t *ep)
 {
     if (ep->pips) {
@@ -289,6 +315,7 @@ static void dp_pips_destroy(io_ep_t *ep)
     }
 }
 
+/* 销毁端点应用映射表 */
 static void ep_app_destroy(io_ep_t *ep)
 {
     struct cds_lfht_node *node;

@@ -1,3 +1,15 @@
+/**
+ * @file dpi_packet.c
+ * @brief DPI数据包解析模块 - 协议栈解析和校验
+ * 
+ * 本文件实现各层协议的解析、校验和字段提取：
+ *   - L2/L3/L4协议头解析
+ *   - TCP/UDP/ICMP协议处理
+ *   - 校验和验证
+ *   - 嵌入式ICMP错误消息解析
+ *   - TCP选项解析
+ */
+
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -27,6 +39,7 @@ extern void dpi_ip_tracker(dpi_packet_t *p);
 
 extern bool cmp_mac_prefix(void *m1, void *prefix);
 
+/* 计算L4层校验和的通用函数 */
 static uint16_t get_l4_cksum(uint32_t sum, void *l4_hdr, uint16_t l4_len)
 {
     register uint16_t *ptr;
@@ -47,6 +60,7 @@ static uint16_t get_l4_cksum(uint32_t sum, void *l4_hdr, uint16_t l4_len)
     return (uint16_t)(~sum);
 }
 
+/* 计算IPv6 L4层校验和，包含IPv6伪头部 */
 uint16_t get_l4v6_cksum(struct ip6_hdr *ip6h, uint8_t ip_proto, void *l4_hdr, uint16_t l4_len)
 {
     register uint32_t sum = 0;
@@ -78,6 +92,7 @@ uint16_t get_l4v6_cksum(struct ip6_hdr *ip6h, uint8_t ip_proto, void *l4_hdr, ui
     return get_l4_cksum(sum, l4_hdr, l4_len);
 }
 
+/* 计算IPv4 L4层校验和，包含IPv4伪头部 */
 uint16_t get_l4v4_cksum(struct iphdr *iph, void *l4_hdr, uint16_t l4_len)
 {
     register uint32_t sum = 0;
@@ -111,6 +126,7 @@ uint16_t get_l4v4_cksum(struct iphdr *iph, void *l4_hdr, uint16_t l4_len)
     return get_l4_cksum(sum, l4_hdr, l4_len);
 }
 
+/* 计算IPv4头部校验和 */
 uint16_t get_ip_cksum(struct iphdr *iph)
 {
     register uint16_t *ptr = (uint16_t *)iph;
@@ -125,6 +141,7 @@ uint16_t get_ip_cksum(struct iphdr *iph)
     return (uint16_t)(~sum);
 }
 
+/* 解析ICMP错误消息中嵌入的IPv4数据包，用于会话关联 */
 int dpi_parse_embed_icmp(dpi_packet_t *p)
 {
     struct icmphdr *icmph;
@@ -184,6 +201,7 @@ int dpi_parse_embed_icmp(dpi_packet_t *p)
     return 0;
 }
 
+/* 解析IPv6扩展头，用于嵌入式ICMPv6处理 */
 static int dpi_parse_ipv6_ext4embed_icmp(struct ip6_hdr *ip6h, uint8_t *ptr, uint8_t *end, uint8_t *protocol)
 {
     int ext_len;
@@ -231,6 +249,7 @@ static int dpi_parse_ipv6_ext4embed_icmp(struct ip6_hdr *ip6h, uint8_t *ptr, uin
     return -1;
 }
 
+/* 解析ICMPv6错误消息中嵌入的IPv6数据包 */
 int dpi_parse_embed_icmpv6(dpi_packet_t *p)
 {
     struct icmp6_hdr *icmp6h;
@@ -286,6 +305,7 @@ int dpi_parse_embed_icmpv6(dpi_packet_t *p)
     return 0;
 }
 
+/* 解析ICMPv6数据包，提取类型和代码字段 */
 static int dpi_parse_icmpv6(dpi_packet_t *p)
 {
     struct icmp6_hdr *icmp6h = (struct icmp6_hdr *)(p->pkt + p->l4);
@@ -403,6 +423,7 @@ static int dpi_parse_icmp(dpi_packet_t *p)
     return 0;
 }
 
+/* 解析UDP数据包，提取端口号并验证校验和 */
 static int dpi_parse_udp(dpi_packet_t *p)
 {
     struct udphdr *udph = (struct udphdr *)(p->pkt + p->l4);
@@ -447,6 +468,7 @@ static int dpi_parse_udp(dpi_packet_t *p)
     return 0;
 }
 
+/* TCP选项长度表，用于选项解析验证 */
 static uint8_t tcp_opt_len[TCP_OPT_MAX] = {
     [TCP_OPT_EOL] = 1,
     [TCP_OPT_NOP] = 1,
@@ -466,6 +488,7 @@ static uint8_t tcp_opt_len[TCP_OPT_MAX] = {
     [TCP_OPT_MD5] = 18,
 };
 
+/* 解析TCP选项，提取MSS、窗口缩放、时间戳等信息 */
 static int dpi_parse_tcp_options(dpi_packet_t *p)
 {
     struct tcphdr *tcph = (struct tcphdr *)(p->pkt + p->l4);
@@ -527,6 +550,7 @@ static int dpi_parse_tcp_options(dpi_packet_t *p)
 }
 
 #define TCP_FLAG_MASK (TH_PUSH | TH_URG | TH_FIN | TH_ACK | TH_SYN | TH_RST)
+/* 非法TCP标志位组合列表，用于检测异常数据包 */
 static uint8_t tcp_bad_flag_list[] = {
     0,
     TH_URG,
@@ -541,6 +565,7 @@ static uint8_t tcp_bad_flag_list[] = {
 };
 BITMASK_DEFINE(tcp_bad_flag_mask, 256);
 
+/* 将TCP标志位转换为可读字符串 */
 char *get_tcp_flag_string(struct tcphdr *tcph, char *s)
 {
     char *f = s;
@@ -556,6 +581,7 @@ char *get_tcp_flag_string(struct tcphdr *tcph, char *s)
     return s;
 }
 
+/* 解析TCP数据包，验证头部、标志位和校验和 */
 static int dpi_parse_tcp(dpi_packet_t *p)
 {
     struct tcphdr *tcph = (struct tcphdr *)(p->pkt + p->l4);
@@ -639,6 +665,7 @@ static int dpi_parse_tcp(dpi_packet_t *p)
 }
 
 
+/* 解析IPv4头部，验证长度和校验和 */
 static int dpi_parse_ipv4_hdr(dpi_packet_t *p)
 {
     struct iphdr *iph;
@@ -697,6 +724,7 @@ static int dpi_parse_ipv4_hdr(dpi_packet_t *p)
     return 0;
 }
 
+/* 解析IPv4数据包，处理分片并分发到L4协议解析 */
 static int dpi_parse_ipv4(dpi_packet_t *p)
 {
     if (dpi_parse_ipv4_hdr(p) < 0) {
@@ -737,6 +765,7 @@ static int dpi_parse_ipv4(dpi_packet_t *p)
 }
 
 
+/* 解析IPv6扩展头，定位L4协议头位置 */
 static int dpi_parse_ipv6_ext(dpi_packet_t *p, uint8_t *protocol)
 {
     struct ip6_hdr *ip6h = (struct ip6_hdr *)(p->pkt + p->l3);
@@ -791,6 +820,7 @@ static int dpi_parse_ipv6_ext(dpi_packet_t *p, uint8_t *protocol)
     return -1;
 }
 
+/* 解析IPv6头部和扩展头 */
 static int dpi_parse_ipv6_hdr(dpi_packet_t *p, uint8_t *protocol)
 {
     struct ip6_hdr *ip6h;
@@ -830,6 +860,7 @@ static int dpi_parse_ipv6_hdr(dpi_packet_t *p, uint8_t *protocol)
 }
 
 
+/* 解析IPv6数据包，处理分片并分发到L4协议解析 */
 static int dpi_parse_ipv6(dpi_packet_t *p)
 {
     uint8_t protocol = 0;
@@ -869,6 +900,7 @@ static int dpi_parse_ipv6(dpi_packet_t *p)
     return 0;
 }
 
+/* 数据包解析主函数，从以太网头开始逐层解析 */
 static int dpi_parse_packet(dpi_packet_t *p)
 {
     struct ethhdr *eth;
@@ -907,6 +939,7 @@ static int dpi_parse_packet(dpi_packet_t *p)
     return 0;
 }
 
+/* 设置数据包处理动作，高优先级动作不会被覆盖 */
 void dpi_set_action(dpi_packet_t *p, int act)
 {
     if (p->action > DPI_ACTION_ALLOW && act <= DPI_ACTION_ALLOW) {
@@ -917,6 +950,7 @@ void dpi_set_action(dpi_packet_t *p, int act)
     DEBUG_LOG(DBG_PACKET, p, "action=%s\n", debug_action_name(act));
 }
 
+/* 判断动作是否为最终动作，TAP模式下不执行阻断 */
 bool dpi_is_action_final(dpi_packet_t *p, int act)
 {
     if (unlikely(act == DPI_ACTION_BYPASS)) {
@@ -931,6 +965,7 @@ bool dpi_is_action_final(dpi_packet_t *p, int act)
     return false;
 }
 
+/* 以太网层解析入口，分配包ID并启动协议栈解析 */
 int dpi_parse_ethernet(dpi_packet_t *p)
 {
     int ret;
@@ -948,6 +983,7 @@ int dpi_parse_ethernet(dpi_packet_t *p)
     return DPI_ACTION_NONE;
 }
 
+/* 根据协议类型调用相应的协议追踪器 */
 static void dpi_pkt_proto_tracker(dpi_packet_t *p)
 {
     switch (p->ip_proto) {
@@ -973,7 +1009,7 @@ static void dpi_pkt_proto_tracker(dpi_packet_t *p)
 
 }
 
-// caller makes sure p->session is not NULL
+/* 调用协议解析器，识别应用层协议 */
 static void dpi_pkt_proto_parser(dpi_packet_t *p)
 {
     // Protocol parsers
@@ -998,7 +1034,7 @@ static void dpi_pkt_proto_parser(dpi_packet_t *p)
 }
 
 
-// caller makes sure p->session is not NULL
+/* 重新评估策略，处理策略违规和阻断动作 */
 static void dpi_pkt_policy_reeval(dpi_packet_t *p)
 {
     bool to_server = dpi_is_client_pkt(p);
@@ -1030,6 +1066,7 @@ static void dpi_pkt_policy_reeval(dpi_packet_t *p)
     }
 }
 
+/* 生成会话日志，包括连接开始、中间状态和违规记录 */
 static void dpi_pkt_log(dpi_packet_t *p)
 {
     dpi_session_t *s = p->session;
@@ -1079,6 +1116,7 @@ static void dpi_pkt_log(dpi_packet_t *p)
     return;
 }
 
+/* TCP数据包缓存处理，用于流重组和乱序处理 */
 static void dpi_post_cache_packet(dpi_packet_t *p)
 {
     dpi_wing_t *w0 = p->this_wing;
@@ -1112,6 +1150,7 @@ static void dpi_post_cache_packet(dpi_packet_t *p)
               w0->asm_seq, asm_count(&w0->asm_cache), asm_gross(&w0->asm_cache));
 }
 
+/* DPI深度检测主函数，执行会话查找、协议解析、策略评估和日志记录 */
 int dpi_inspect_ethernet(dpi_packet_t *p)
 {
     p->pkt_buffer = &p->raw;
@@ -1208,6 +1247,7 @@ int dpi_inspect_ethernet(dpi_packet_t *p)
     return p->action;
 }
 
+/* 更新统计时间槽，清理过期的环形缓冲区数据 */
 void dpi_catch_stats_slot(io_stats_t *stats, uint32_t slot)
 {
     if (slot - stats->cur_slot >= STATS_SLOTS) {
@@ -1232,6 +1272,7 @@ void dpi_catch_stats_slot(io_stats_t *stats, uint32_t slot)
     }
 }
 
+/* 增加数据包统计计数，更新字节数和包数 */
 void dpi_inc_stats_packet(dpi_packet_t *p)
 {
     uint32_t s = p->ep_stats->cur_slot % STATS_SLOTS;
@@ -1246,6 +1287,7 @@ void dpi_inc_stats_packet(dpi_packet_t *p)
     p->all_metry->byte_ring[s] += p->cap_len;
 }
 
+/* 增加会话统计计数，区分入站和出站会话 */
 void dpi_inc_stats_session(dpi_packet_t *p, dpi_session_t *s)
 {
     uint32_t slot = p->ep_stats->cur_slot % STATS_SLOTS;
@@ -1275,6 +1317,7 @@ void dpi_inc_stats_session(dpi_packet_t *p, dpi_session_t *s)
     }
 }
 
+/* 减少会话统计计数，会话结束时调用 */
 void dpi_dec_stats_session(dpi_session_t *s)
 {
     if (FLAGS_TEST(s->flags, DPI_SESS_FLAG_INGRESS)) {
@@ -1294,6 +1337,7 @@ void dpi_dec_stats_session(dpi_session_t *s)
     }
 }
 
+/* 初始化数据包解析模块，设置TCP非法标志位掩码 */
 void dpi_packet_setup(void)
 {
     int i;

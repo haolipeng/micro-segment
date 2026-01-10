@@ -1,3 +1,14 @@
+/**
+ * @file debug.c
+ * @brief 调试和日志模块 - 提供分级调试输出功能
+ * 
+ * 实现调试日志的分级管理和输出：
+ *   - 多级别调试开关（init、error、ctrl、packet等）
+ *   - 调试级别名称转换
+ *   - 策略动作名称转换
+ *   - 统一的调试输出接口
+ */
+
 #include <stdio.h>
 #include <string.h>
 #include <strings.h>
@@ -8,6 +19,7 @@
 
 uint32_t g_debug_levels = DBG_DEFAULT;
 
+/* 调试输出主函数，支持可变参数和时间戳 */
 int debug_func(bool print_ts, const char *fmt, ...)
 {
     va_list args;
@@ -20,6 +32,7 @@ int debug_func(bool print_ts, const char *fmt, ...)
     return ret;
 }
 
+/* 将调试级别名称转换为对应的位掩码 */
 uint32_t debug_name2level(const char *name)
 {
     if (strcasecmp(name, "all") == 0) {
@@ -48,6 +61,7 @@ uint32_t debug_name2level(const char *name)
     return 0;
 }
 
+/* 将策略动作代码转换为可读字符串 */
 const char *debug_action_name(uint8_t action)
 {
     switch (action) {
