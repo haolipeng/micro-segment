@@ -19,6 +19,7 @@ type Handler struct {
 }
 
 // NewHandler 创建处理器
+// 初始化REST API处理器和依赖组件
 func NewHandler(c *cache.Cache, p *policy.Engine) *Handler {
 	return &Handler{
 		cache:  c,
@@ -34,6 +35,7 @@ type Response struct {
 }
 
 // writeJSON 写入JSON响应
+// 设置Content-Type并编码JSON响应
 func writeJSON(w http.ResponseWriter, status int, data interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
@@ -41,6 +43,7 @@ func writeJSON(w http.ResponseWriter, status int, data interface{}) {
 }
 
 // writeError 写入错误响应
+// 返回标准格式的错误响应
 func writeError(w http.ResponseWriter, status int, message string) {
 	writeJSON(w, status, Response{
 		Code:    status,
@@ -49,6 +52,7 @@ func writeError(w http.ResponseWriter, status int, message string) {
 }
 
 // writeSuccess 写入成功响应
+// 返回标准格式的成功响应
 func writeSuccess(w http.ResponseWriter, data interface{}) {
 	writeJSON(w, http.StatusOK, Response{
 		Code: 0,
@@ -59,12 +63,14 @@ func writeSuccess(w http.ResponseWriter, data interface{}) {
 // --- 工作负载API ---
 
 // ListWorkloads 列出工作负载
+// 返回所有工作负载的列表
 func (h *Handler) ListWorkloads(w http.ResponseWriter, r *http.Request) {
 	workloads := h.cache.ListWorkloads()
 	writeSuccess(w, workloads)
 }
 
 // GetWorkload 获取工作负载
+// 根据ID查询单个工作负载详情
 func (h *Handler) GetWorkload(w http.ResponseWriter, r *http.Request) {
 	id := r.URL.Query().Get("id")
 	if id == "" {
@@ -84,12 +90,14 @@ func (h *Handler) GetWorkload(w http.ResponseWriter, r *http.Request) {
 // --- 组API ---
 
 // ListGroups 列出组
+// 返回所有安全组的列表
 func (h *Handler) ListGroups(w http.ResponseWriter, r *http.Request) {
 	groups := h.cache.ListGroups()
 	writeSuccess(w, groups)
 }
 
 // GetGroup 获取组
+// 根据名称查询单个安全组详情
 func (h *Handler) GetGroup(w http.ResponseWriter, r *http.Request) {
 	name := r.URL.Query().Get("name")
 	if name == "" {
@@ -107,6 +115,7 @@ func (h *Handler) GetGroup(w http.ResponseWriter, r *http.Request) {
 }
 
 // CreateGroup 创建组
+// 创建新的安全组
 func (h *Handler) CreateGroup(w http.ResponseWriter, r *http.Request) {
 	var group controller.Group
 	if err := json.NewDecoder(r.Body).Decode(&group); err != nil {
@@ -124,6 +133,7 @@ func (h *Handler) CreateGroup(w http.ResponseWriter, r *http.Request) {
 }
 
 // DeleteGroup 删除组
+// 根据名称删除安全组
 func (h *Handler) DeleteGroup(w http.ResponseWriter, r *http.Request) {
 	name := r.URL.Query().Get("name")
 	if name == "" {
@@ -138,12 +148,14 @@ func (h *Handler) DeleteGroup(w http.ResponseWriter, r *http.Request) {
 // --- 策略API ---
 
 // ListPolicies 列出策略
+// 返回所有网络策略规则列表
 func (h *Handler) ListPolicies(w http.ResponseWriter, r *http.Request) {
 	rules := h.policy.ListRules()
 	writeSuccess(w, rules)
 }
 
 // GetPolicy 获取策略
+// 根据ID查询单个策略规则详情
 func (h *Handler) GetPolicy(w http.ResponseWriter, r *http.Request) {
 	idStr := r.URL.Query().Get("id")
 	if idStr == "" {
@@ -167,6 +179,7 @@ func (h *Handler) GetPolicy(w http.ResponseWriter, r *http.Request) {
 }
 
 // CreatePolicy 创建策略
+// 创建新的网络策略规则
 func (h *Handler) CreatePolicy(w http.ResponseWriter, r *http.Request) {
 	var rule controller.PolicyRule
 	if err := json.NewDecoder(r.Body).Decode(&rule); err != nil {
@@ -183,6 +196,7 @@ func (h *Handler) CreatePolicy(w http.ResponseWriter, r *http.Request) {
 }
 
 // UpdatePolicy 更新策略
+// 更新现有的网络策略规则
 func (h *Handler) UpdatePolicy(w http.ResponseWriter, r *http.Request) {
 	var rule controller.PolicyRule
 	if err := json.NewDecoder(r.Body).Decode(&rule); err != nil {

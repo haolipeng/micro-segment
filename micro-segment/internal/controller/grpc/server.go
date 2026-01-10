@@ -47,6 +47,7 @@ type AgentState struct {
 }
 
 // NewServer 创建gRPC服务器
+// 初始化服务器配置和Agent状态管理
 func NewServer(port int, c *cache.Cache, p *policy.Engine) *Server {
 	return &Server{
 		port:   port,
@@ -57,16 +58,19 @@ func NewServer(port int, c *cache.Cache, p *policy.Engine) *Server {
 }
 
 // SetOnAgentJoin 设置Agent加入回调
+// 注册Agent连接事件处理函数
 func (s *Server) SetOnAgentJoin(cb func(agentID, hostID string)) {
 	s.onAgentJoin = cb
 }
 
 // SetOnAgentLeave 设置Agent离开回调
+// 注册Agent断开连接事件处理函数
 func (s *Server) SetOnAgentLeave(cb func(agentID string)) {
 	s.onAgentLeave = cb
 }
 
 // Start 启动服务器
+// 启动gRPC服务监听和Agent超时检测
 func (s *Server) Start() error {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
@@ -99,6 +103,7 @@ func (s *Server) Start() error {
 }
 
 // Stop 停止服务器
+// 优雅关闭gRPC服务器和监听器
 func (s *Server) Stop() {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
@@ -113,6 +118,7 @@ func (s *Server) Stop() {
 }
 
 // IsRunning 检查服务器是否运行中
+// 线程安全地返回服务器运行状态
 func (s *Server) IsRunning() bool {
 	s.mutex.RLock()
 	defer s.mutex.RUnlock()
@@ -120,6 +126,7 @@ func (s *Server) IsRunning() bool {
 }
 
 // agentTimeoutChecker 检测Agent超时
+// 定期检查Agent心跳超时并标记离线
 func (s *Server) agentTimeoutChecker() {
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
@@ -131,6 +138,7 @@ func (s *Server) agentTimeoutChecker() {
 }
 
 // checkAgentTimeout 检查Agent超时
+// 检查所有Agent的最后心跳时间并更新状态
 func (s *Server) checkAgentTimeout() {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
@@ -153,6 +161,7 @@ func (s *Server) checkAgentTimeout() {
 // ============================================
 
 // Register Agent注册
+// 处理Agent注册请求并返回集群配置
 func (s *Server) Register(ctx context.Context, req *pb.AgentInfo) (*pb.RegisterResponse, error) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
@@ -176,6 +185,7 @@ func (s *Server) Register(ctx context.Context, req *pb.AgentInfo) (*pb.RegisterR
 }
 
 // Heartbeat Agent心跳
+// 处理Agent心跳请求并更新在线状态
 func (s *Server) Heartbeat(ctx context.Context, req *pb.HeartbeatRequest) (*pb.HeartbeatResponse, error) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
@@ -193,6 +203,7 @@ func (s *Server) Heartbeat(ctx context.Context, req *pb.HeartbeatRequest) (*pb.H
 }
 
 // ReportConnections 上报连接
+// 接收Agent上报的网络连接数据并更新缓存
 func (s *Server) ReportConnections(ctx context.Context, req *pb.ConnectionReport) (*pb.ReportResponse, error) {
 	// 处理连接上报
 	for _, conn := range req.Connections {
@@ -207,6 +218,7 @@ func (s *Server) ReportConnections(ctx context.Context, req *pb.ConnectionReport
 }
 
 // ReportThreats 上报威胁日志
+// 接收Agent上报的安全威胁检测结果
 func (s *Server) ReportThreats(ctx context.Context, req *pb.ThreatReport) (*pb.ReportResponse, error) {
 	// 处理威胁日志
 	// TODO: 存储威胁日志
@@ -218,6 +230,7 @@ func (s *Server) ReportThreats(ctx context.Context, req *pb.ThreatReport) (*pb.R
 }
 
 // ReportWorkload 上报工作负载变更
+// 处理容器生命周期事件并更新工作负载缓存
 func (s *Server) ReportWorkload(ctx context.Context, req *pb.WorkloadEvent) (*pb.ReportResponse, error) {
 	switch req.EventType {
 	case "add", "update":
@@ -235,6 +248,7 @@ func (s *Server) ReportWorkload(ctx context.Context, req *pb.WorkloadEvent) (*pb
 }
 
 // GetPolicies 获取策略
+// 返回指定工作负载的网络策略规则列表
 func (s *Server) GetPolicies(ctx context.Context, req *pb.PolicyRequest) (*pb.PolicyList, error) {
 	rules := s.policy.ListRules()
 
@@ -258,6 +272,7 @@ func (s *Server) GetPolicies(ctx context.Context, req *pb.PolicyRequest) (*pb.Po
 }
 
 // actionToProto 转换动作到proto
+// 将策略动作字符串转换为protobuf枚举值
 func actionToProto(action string) uint32 {
 	switch action {
 	case "open":
@@ -274,6 +289,7 @@ func actionToProto(action string) uint32 {
 }
 
 // GetAgentCount 获取Agent数量
+// 返回已注册的Agent总数
 func (s *Server) GetAgentCount() int {
 	s.mutex.RLock()
 	defer s.mutex.RUnlock()
@@ -281,6 +297,7 @@ func (s *Server) GetAgentCount() int {
 }
 
 // GetOnlineAgentCount 获取在线Agent数量
+// 返回当前在线的Agent数量
 func (s *Server) GetOnlineAgentCount() int {
 	s.mutex.RLock()
 	defer s.mutex.RUnlock()
