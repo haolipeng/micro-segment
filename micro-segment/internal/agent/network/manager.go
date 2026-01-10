@@ -28,6 +28,7 @@ type NetworkStats struct {
 }
 
 // NewManager 创建网络管理器
+// 初始化TC流量捕获和容器监控组件
 func NewManager() (*Manager, error) {
 	log.Info("Initializing TC-based network manager")
 	
@@ -52,6 +53,7 @@ func NewManager() (*Manager, error) {
 }
 
 // Start 启动网络管理器
+// 启动容器监控和统计更新循环
 func (m *Manager) Start() error {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
@@ -77,6 +79,7 @@ func (m *Manager) Start() error {
 }
 
 // Stop 停止网络管理器
+// 停止监控并清理TC流量捕获规则
 func (m *Manager) Stop() error {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
@@ -104,6 +107,7 @@ func (m *Manager) Stop() error {
 }
 
 // IsRunning 检查管理器是否运行中
+// 线程安全地返回管理器运行状态
 func (m *Manager) IsRunning() bool {
 	m.mutex.RLock()
 	defer m.mutex.RUnlock()
@@ -111,12 +115,14 @@ func (m *Manager) IsRunning() bool {
 }
 
 // SetDPConnected 设置DP连接状态
+// 更新DP连接状态，TC方案通过bridge mirror数据包
 func (m *Manager) SetDPConnected(connected bool) {
 	log.WithField("connected", connected).Info("DP connection status updated for TC capture")
 	// TC方案不需要特殊的DP连接处理，因为数据包通过bridge mirror到DP
 }
 
 // GetStats 获取网络统计信息
+// 返回当前网络捕获和处理统计数据
 func (m *Manager) GetStats() *NetworkStats {
 	m.mutex.RLock()
 	defer m.mutex.RUnlock()
@@ -128,21 +134,25 @@ func (m *Manager) GetStats() *NetworkStats {
 }
 
 // GetCapturedContainers 获取正在捕获的容器列表
+// 返回当前配置了TC规则的容器ID列表
 func (m *Manager) GetCapturedContainers() []string {
 	return m.tcCapture.GetCapturedContainers()
 }
 
 // GetRunningContainers 获取运行中的容器列表
+// 从Docker API获取当前运行的容器信息
 func (m *Manager) GetRunningContainers() ([]*ContainerEvent, error) {
 	return m.containerMonitor.ListRunningContainers()
 }
 
 // GetContainerInfo 获取容器信息
+// 查询指定容器的详细信息和网络配置
 func (m *Manager) GetContainerInfo(containerID string) (*ContainerEvent, error) {
 	return m.containerMonitor.GetContainerInfo(containerID)
 }
 
 // ForceStartCapture 强制开始捕获指定容器
+// 手动为指定容器创建veth pair和TC规则
 func (m *Manager) ForceStartCapture(containerID string) error {
 	containerInfo, err := m.containerMonitor.GetContainerInfo(containerID)
 	if err != nil {
@@ -157,11 +167,13 @@ func (m *Manager) ForceStartCapture(containerID string) error {
 }
 
 // ForceStopCapture 强制停止捕获指定容器
+// 手动清理指定容器的TC规则和veth pair
 func (m *Manager) ForceStopCapture(containerID string) error {
 	return m.tcCapture.StopContainerCapture(containerID)
 }
 
 // statsUpdateLoop 统计信息更新循环
+// 定期更新网络捕获统计数据
 func (m *Manager) statsUpdateLoop() {
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
@@ -178,6 +190,7 @@ func (m *Manager) statsUpdateLoop() {
 }
 
 // updateStats 更新统计信息
+// 收集当前捕获状态和性能数据
 func (m *Manager) updateStats() {
 	capturedContainers := m.tcCapture.GetCapturedContainers()
 	
@@ -190,6 +203,7 @@ func (m *Manager) updateStats() {
 }
 
 // GetNetworkTopology 获取网络拓扑信息
+// 返回容器网络拓扑和捕获状态概览
 func (m *Manager) GetNetworkTopology() (map[string]interface{}, error) {
 	containers, err := m.GetRunningContainers()
 	if err != nil {
@@ -208,6 +222,7 @@ func (m *Manager) GetNetworkTopology() (map[string]interface{}, error) {
 }
 
 // ValidateSetup 验证网络设置
+// 检查TC、Docker等必需工具的可用性
 func (m *Manager) ValidateSetup() error {
 	log.Info("Validating TC-based network setup")
 	
@@ -242,6 +257,7 @@ func (m *Manager) ValidateSetup() error {
 }
 
 // GetDebugInfo 获取调试信息
+// 返回详细的网络管理器状态和配置信息
 func (m *Manager) GetDebugInfo() map[string]interface{} {
 	debugInfo := map[string]interface{}{
 		"running":             m.IsRunning(),

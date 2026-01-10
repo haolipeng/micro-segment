@@ -34,6 +34,7 @@ type ContainerEvent struct {
 }
 
 // NewContainerMonitor 创建容器监控器
+// 初始化Docker客户端和TC流量捕获器连接
 func NewContainerMonitor(tcCapture *TCTrafficCapture) (*ContainerMonitor, error) {
 	// 连接Docker daemon
 	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
@@ -54,6 +55,7 @@ func NewContainerMonitor(tcCapture *TCTrafficCapture) (*ContainerMonitor, error)
 }
 
 // Start 启动容器监控
+// 扫描现有容器并启动事件监听
 func (cm *ContainerMonitor) Start() error {
 	log.Info("Starting Docker container monitor")
 	
@@ -69,6 +71,7 @@ func (cm *ContainerMonitor) Start() error {
 }
 
 // Stop 停止容器监控
+// 取消监听并关闭Docker客户端连接
 func (cm *ContainerMonitor) Stop() error {
 	log.Info("Stopping Docker container monitor")
 	
@@ -82,6 +85,7 @@ func (cm *ContainerMonitor) Stop() error {
 }
 
 // monitorExistingContainers 监控现有运行的容器
+// 扫描当前运行的容器并开始流量捕获
 func (cm *ContainerMonitor) monitorExistingContainers() error {
 	log.Info("Scanning existing containers")
 	
@@ -122,6 +126,7 @@ func (cm *ContainerMonitor) monitorExistingContainers() error {
 }
 
 // monitorContainerEvents 监控容器事件
+// 持续监听Docker事件流并处理容器生命周期
 func (cm *ContainerMonitor) monitorContainerEvents() {
 	log.Info("Starting container event monitoring")
 	
@@ -159,6 +164,7 @@ func (cm *ContainerMonitor) monitorContainerEvents() {
 }
 
 // processDockerEvent 处理Docker事件
+// 解析Docker事件并转换为内部容器事件格式
 func (cm *ContainerMonitor) processDockerEvent(event events.Message) {
 	log.WithFields(log.Fields{
 		"action":    event.Action,
@@ -191,6 +197,7 @@ func (cm *ContainerMonitor) processDockerEvent(event events.Message) {
 }
 
 // handleContainerEvent 处理容器事件
+// 根据容器生命周期事件启动或停止流量捕获
 func (cm *ContainerMonitor) handleContainerEvent(event *ContainerEvent) {
 	log.WithFields(log.Fields{
 		"action":    event.Type,
@@ -219,6 +226,7 @@ func (cm *ContainerMonitor) handleContainerEvent(event *ContainerEvent) {
 }
 
 // shouldSkipContainer 判断是否应该跳过容器
+// 过滤系统容器、特权容器和主机网络模式容器
 func (cm *ContainerMonitor) shouldSkipContainer(inspect *types.ContainerJSON) bool {
 	// 跳过暂停容器
 	if strings.Contains(inspect.Config.Image, "pause") {
@@ -259,6 +267,7 @@ func (cm *ContainerMonitor) shouldSkipContainer(inspect *types.ContainerJSON) bo
 }
 
 // GetContainerInfo 获取容器信息
+// 查询指定容器的详细信息和运行状态
 func (cm *ContainerMonitor) GetContainerInfo(containerID string) (*ContainerEvent, error) {
 	inspect, err := cm.client.ContainerInspect(cm.ctx, containerID)
 	if err != nil {
@@ -276,6 +285,7 @@ func (cm *ContainerMonitor) GetContainerInfo(containerID string) (*ContainerEven
 }
 
 // ListRunningContainers 列出正在运行的容器
+// 返回当前所有运行中的非系统容器列表
 func (cm *ContainerMonitor) ListRunningContainers() ([]*ContainerEvent, error) {
 	containers, err := cm.client.ContainerList(cm.ctx, types.ContainerListOptions{})
 	if err != nil {
@@ -311,6 +321,7 @@ func (cm *ContainerMonitor) ListRunningContainers() ([]*ContainerEvent, error) {
 }
 
 // GetContainerStats 获取容器统计信息
+// 从Docker API获取容器的资源使用统计
 func (cm *ContainerMonitor) GetContainerStats(containerID string) (map[string]interface{}, error) {
 	stats, err := cm.client.ContainerStats(cm.ctx, containerID, false)
 	if err != nil {

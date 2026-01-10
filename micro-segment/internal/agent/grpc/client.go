@@ -37,6 +37,7 @@ type Client struct {
 }
 
 // NewClient 创建gRPC客户端
+// 初始化与Controller通信的gRPC客户端
 func NewClient(serverAddr, agentID, hostID, hostName, version string) *Client {
 	return &Client{
 		serverAddr:        serverAddr,
@@ -50,6 +51,7 @@ func NewClient(serverAddr, agentID, hostID, hostName, version string) *Client {
 }
 
 // Connect 连接到Controller
+// 建立gRPC连接，设置超时和认证
 func (c *Client) Connect() error {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
@@ -76,6 +78,7 @@ func (c *Client) Connect() error {
 }
 
 // Disconnect 断开连接
+// 停止心跳并关闭gRPC连接
 func (c *Client) Disconnect() {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
@@ -90,6 +93,7 @@ func (c *Client) Disconnect() {
 }
 
 // IsConnected 检查是否已连接
+// 线程安全地返回gRPC连接状态
 func (c *Client) IsConnected() bool {
 	c.mutex.RLock()
 	defer c.mutex.RUnlock()
@@ -97,6 +101,7 @@ func (c *Client) IsConnected() bool {
 }
 
 // Register 注册Agent
+// 向Controller注册Agent信息并启动心跳
 func (c *Client) Register() error {
 	c.mutex.RLock()
 	if !c.connected {
@@ -135,6 +140,7 @@ func (c *Client) Register() error {
 }
 
 // heartbeatLoop 心跳循环
+// 定期向Controller发送心跳保持连接
 func (c *Client) heartbeatLoop() {
 	ticker := time.NewTicker(c.heartbeatInterval)
 	defer ticker.Stop()
@@ -150,6 +156,7 @@ func (c *Client) heartbeatLoop() {
 }
 
 // sendHeartbeat 发送心跳
+// 发送单次心跳消息到Controller
 func (c *Client) sendHeartbeat() {
 	c.mutex.RLock()
 	if !c.connected {
@@ -172,6 +179,7 @@ func (c *Client) sendHeartbeat() {
 }
 
 // ReportConnections 上报连接
+// 批量上报网络连接数据到Controller
 func (c *Client) ReportConnections(conns []*agent.Connection) error {
 	c.mutex.RLock()
 	if !c.connected {
@@ -229,6 +237,7 @@ func (c *Client) ReportConnections(conns []*agent.Connection) error {
 }
 
 // ReportThreats 上报威胁日志
+// 批量上报安全威胁检测结果到Controller
 func (c *Client) ReportThreats(threats []*agent.ThreatLog) error {
 	c.mutex.RLock()
 	if !c.connected {
@@ -277,6 +286,7 @@ func (c *Client) ReportThreats(threats []*agent.ThreatLog) error {
 }
 
 // ReportWorkload 上报工作负载变更
+// 上报容器生命周期事件到Controller
 func (c *Client) ReportWorkload(eventType string, wl *agent.Workload) error {
 	c.mutex.RLock()
 	if !c.connected {
@@ -334,6 +344,7 @@ func (c *Client) ReportWorkload(eventType string, wl *agent.Workload) error {
 }
 
 // GetPolicies 获取策略
+// 从Controller获取指定工作负载的网络策略
 func (c *Client) GetPolicies(workloadIDs []string) ([]*agent.PolicyRule, error) {
 	c.mutex.RLock()
 	if !c.connected {
@@ -371,6 +382,7 @@ func (c *Client) GetPolicies(workloadIDs []string) ([]*agent.PolicyRule, error) 
 }
 
 // ipToBytes 转换IP为字节
+// 将IP地址转换为字节数组，支持IPv4和IPv6
 func ipToBytes(ip net.IP) []byte {
 	if ip4 := ip.To4(); ip4 != nil {
 		return ip4

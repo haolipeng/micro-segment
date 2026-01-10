@@ -20,6 +20,7 @@ type NetworkPolicy struct {
 }
 
 // NewNetworkPolicy 创建网络策略管理器
+// 初始化策略规则存储和DP客户端连接
 func NewNetworkPolicy(dpClient *dp.DPClient) *NetworkPolicy {
 	return &NetworkPolicy{
 		rules:    make(map[uint32]*agent.PolicyRule),
@@ -28,6 +29,7 @@ func NewNetworkPolicy(dpClient *dp.DPClient) *NetworkPolicy {
 }
 
 // AddRule 添加规则
+// 添加单条网络策略规则到内存
 func (p *NetworkPolicy) AddRule(rule *agent.PolicyRule) {
 	p.mutex.Lock()
 	defer p.mutex.Unlock()
@@ -42,6 +44,7 @@ func (p *NetworkPolicy) AddRule(rule *agent.PolicyRule) {
 }
 
 // DeleteRule 删除规则
+// 从内存中移除指定ID的策略规则
 func (p *NetworkPolicy) DeleteRule(id uint32) {
 	p.mutex.Lock()
 	defer p.mutex.Unlock()
@@ -51,6 +54,7 @@ func (p *NetworkPolicy) DeleteRule(id uint32) {
 }
 
 // GetRule 获取规则
+// 根据ID查找并返回策略规则
 func (p *NetworkPolicy) GetRule(id uint32) *agent.PolicyRule {
 	p.mutex.RLock()
 	defer p.mutex.RUnlock()
@@ -59,6 +63,7 @@ func (p *NetworkPolicy) GetRule(id uint32) *agent.PolicyRule {
 }
 
 // ListRules 列出所有规则
+// 返回当前所有策略规则的副本
 func (p *NetworkPolicy) ListRules() []*agent.PolicyRule {
 	p.mutex.RLock()
 	defer p.mutex.RUnlock()
@@ -71,6 +76,7 @@ func (p *NetworkPolicy) ListRules() []*agent.PolicyRule {
 }
 
 // UpdateRules 批量更新规则
+// 替换所有策略规则并同步到DP层
 func (p *NetworkPolicy) UpdateRules(rules []*agent.PolicyRule) {
 	p.mutex.Lock()
 	defer p.mutex.Unlock()
@@ -90,6 +96,7 @@ func (p *NetworkPolicy) UpdateRules(rules []*agent.PolicyRule) {
 }
 
 // syncToDP 同步策略到DP层
+// 将内存中的策略规则转换并发送到DP执行
 func (p *NetworkPolicy) syncToDP() {
 	if p.dpClient == nil || !p.dpClient.IsConnected() {
 		return
@@ -109,6 +116,7 @@ func (p *NetworkPolicy) syncToDP() {
 }
 
 // ruleToDPPolicy 转换规则为DP策略
+// 将Agent策略规则转换为DP层可执行格式
 func (p *NetworkPolicy) ruleToDPPolicy(rule *agent.PolicyRule) *dp.DPPolicy {
 	// 简化实现：只处理基本的IP/端口规则
 	return &dp.DPPolicy{
@@ -119,6 +127,7 @@ func (p *NetworkPolicy) ruleToDPPolicy(rule *agent.PolicyRule) *dp.DPPolicy {
 }
 
 // MatchPolicy 匹配策略
+// 根据网络五元组查找匹配的策略规则
 func (p *NetworkPolicy) MatchPolicy(srcIP, dstIP net.IP, dstPort uint16, proto uint8) (uint32, agent.PolicyAction) {
 	p.mutex.RLock()
 	defer p.mutex.RUnlock()
@@ -134,6 +143,7 @@ func (p *NetworkPolicy) MatchPolicy(srcIP, dstIP net.IP, dstPort uint16, proto u
 }
 
 // GetRuleCount 获取规则数量
+// 返回当前策略规则总数
 func (p *NetworkPolicy) GetRuleCount() int {
 	p.mutex.RLock()
 	defer p.mutex.RUnlock()

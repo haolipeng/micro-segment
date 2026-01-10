@@ -72,6 +72,7 @@ type DPPolicy struct {
 }
 
 // NewDPClient 创建DP客户端
+// 初始化Unix socket连接配置
 func NewDPClient(socketPath string) *DPClient {
 	return &DPClient{
 		socketPath: socketPath,
@@ -79,6 +80,7 @@ func NewDPClient(socketPath string) *DPClient {
 }
 
 // Connect 连接到DP
+// 建立Unix datagram socket连接，启动消息读取循环
 func (c *DPClient) Connect() error {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
@@ -104,6 +106,7 @@ func (c *DPClient) Connect() error {
 }
 
 // Disconnect 断开连接
+// 关闭socket连接，停止消息处理
 func (c *DPClient) Disconnect() {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
@@ -117,6 +120,7 @@ func (c *DPClient) Disconnect() {
 }
 
 // IsConnected 检查是否已连接
+// 线程安全地返回连接状态
 func (c *DPClient) IsConnected() bool {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
@@ -124,16 +128,19 @@ func (c *DPClient) IsConnected() bool {
 }
 
 // SetOnConnection 设置连接回调
+// 注册连接数据处理回调函数
 func (c *DPClient) SetOnConnection(cb func(*DPConnection)) {
 	c.onConnection = cb
 }
 
 // SetOnThreatLog 设置威胁日志回调
+// 注册威胁检测结果处理回调函数
 func (c *DPClient) SetOnThreatLog(cb func(*DPThreatLog)) {
 	c.onThreatLog = cb
 }
 
 // readLoop 读取循环
+// 持续读取DP消息并分发处理
 func (c *DPClient) readLoop() {
 	buf := make([]byte, 65536)
 	for {
@@ -151,6 +158,7 @@ func (c *DPClient) readLoop() {
 }
 
 // handleMessage 处理消息
+// 解析JSON消息并调用相应回调函数
 func (c *DPClient) handleMessage(data []byte) {
 	var msg DPMessage
 	if err := json.Unmarshal(data, &msg); err != nil {
@@ -183,6 +191,7 @@ type DPMessage struct {
 }
 
 // SendPolicy 发送策略到DP
+// 将网络策略规则同步到DP层执行
 func (c *DPClient) SendPolicy(policies []*DPPolicy) error {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
@@ -209,6 +218,7 @@ func (c *DPClient) SendPolicy(policies []*DPPolicy) error {
 }
 
 // AddMAC 添加MAC地址
+// 向DP注册容器MAC地址和工作负载ID映射
 func (c *DPClient) AddMAC(mac net.HardwareAddr, workloadID string) error {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
@@ -237,6 +247,7 @@ func (c *DPClient) AddMAC(mac net.HardwareAddr, workloadID string) error {
 }
 
 // DelMAC 删除MAC地址
+// 从DP移除容器MAC地址映射
 func (c *DPClient) DelMAC(mac net.HardwareAddr) error {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
@@ -263,6 +274,7 @@ func (c *DPClient) DelMAC(mac net.HardwareAddr) error {
 }
 
 // ConfigSubnets 配置内部子网
+// 设置DP的内部网络子网范围
 func (c *DPClient) ConfigSubnets(subnets []net.IPNet) error {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()

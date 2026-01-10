@@ -58,6 +58,7 @@ type TCPortInfo struct {
 }
 
 // NewTCTrafficCapture 创建TC流量捕获管理器
+// 初始化容器映射和NeuVector bridge
 func NewTCTrafficCapture() *TCTrafficCapture {
 	tc := &TCTrafficCapture{
 		containers: make(map[string]*TCContainerInfo),
@@ -74,6 +75,7 @@ func NewTCTrafficCapture() *TCTrafficCapture {
 }
 
 // initNVBridge 初始化NeuVector bridge
+// 创建nv-br网桥用于接收mirror流量
 func (tc *TCTrafficCapture) initNVBridge() error {
 	log.Info("Initializing NeuVector bridge for traffic capture")
 	
@@ -115,6 +117,7 @@ func (tc *TCTrafficCapture) initNVBridge() error {
 }
 
 // cleanupBridge 清理bridge
+// 删除qdisc和bridge接口
 func (tc *TCTrafficCapture) cleanupBridge(bridge netlink.Link) {
 	// 删除qdisc
 	tc.delQDisc(NV_BRIDGE_NAME)
@@ -127,24 +130,28 @@ func (tc *TCTrafficCapture) cleanupBridge(bridge netlink.Link) {
 }
 
 // addQDisc 添加ingress qdisc
+// 为指定接口添加入口流量控制队列
 func (tc *TCTrafficCapture) addQDisc(port string) error {
 	cmd := fmt.Sprintf("tc qdisc add dev %s ingress", port)
 	return tc.executeCommand(cmd)
 }
 
 // addQDiscInNamespace 在指定网络命名空间中添加ingress qdisc
+// 在容器网络命名空间中配置流量控制队列
 func (tc *TCTrafficCapture) addQDiscInNamespace(pid int, port string) error {
 	cmd := fmt.Sprintf("nsenter -t %d -n tc qdisc add dev %s ingress", pid, port)
 	return tc.executeCommand(cmd)
 }
 
 // delQDisc 删除ingress qdisc
+// 移除指定接口的入口流量控制队列
 func (tc *TCTrafficCapture) delQDisc(port string) error {
 	cmd := fmt.Sprintf("tc qdisc del dev %s ingress", port)
 	return tc.executeCommand(cmd)
 }
 
 // disableOffload 禁用网络offload功能
+// 关闭硬件加速功能确保TC规则正常工作
 func (tc *TCTrafficCapture) disableOffload(port string) {
 	offloadFeatures := []string{
 		"rx-checksumming",
@@ -164,6 +171,7 @@ func (tc *TCTrafficCapture) disableOffload(port string) {
 }
 
 // StartContainerCapture 开始捕获容器流量
+// 为容器创建veth pair和TC mirror规则
 func (tc *TCTrafficCapture) StartContainerCapture(containerID, containerName string, pid int) error {
 	tc.mutex.Lock()
 	defer tc.mutex.Unlock()
@@ -233,6 +241,7 @@ func (tc *TCTrafficCapture) StartContainerCapture(containerID, containerName str
 }
 
 // getContainerInterfaces 获取容器网络接口列表
+// 解析容器内的网络接口名称
 func (tc *TCTrafficCapture) getContainerInterfaces(pid int) ([]string, error) {
 	cmd := fmt.Sprintf("nsenter -t %d -n ip link show", pid)
 	output, err := exec.Command("sh", "-c", cmd).Output()
@@ -259,6 +268,7 @@ func (tc *TCTrafficCapture) getContainerInterfaces(pid int) ([]string, error) {
 }
 
 // createVethPair 创建veth pair
+// 为容器接口创建对应的veth pair用于流量mirror
 func (tc *TCTrafficCapture) createVethPair(pid int, originalIface string, containerInfo *TCContainerInfo) (*VethPairInfo, error) {
 	log.WithField("interface", originalIface).Debug("Creating veth pair")
 	
@@ -318,6 +328,7 @@ func (tc *TCTrafficCapture) createVethPair(pid int, originalIface string, contai
 }
 
 // getInterfaceMAC 获取接口MAC地址
+// 从容器网络命名空间获取接口MAC地址
 func (tc *TCTrafficCapture) getInterfaceMAC(pid int, iface string) (net.HardwareAddr, error) {
 	// 方法1: 尝试从/sys/class/net读取
 	cmd := fmt.Sprintf("nsenter -t %d -n cat /sys/class/net/%s/address", pid, iface)
@@ -351,6 +362,7 @@ func (tc *TCTrafficCapture) getInterfaceMAC(pid int, iface string) (net.Hardware
 }
 
 // getAvailableIndex 获取可用的接口索引
+// 分配唯一的接口索引用于MAC地址生成
 func (tc *TCTrafficCapture) getAvailableIndex() uint {
 	for i := uint(1); i < TC_PREF_MAX; i++ {
 		if !tc.prefs[i] {
@@ -362,6 +374,7 @@ func (tc *TCTrafficCapture) getAvailableIndex() uint {
 }
 
 // renameInterface 重命名接口
+// 在容器命名空间中重命名网络接口
 func (tc *TCTrafficCapture) renameInterface(pid int, oldName, newName string) error {
 	cmd := fmt.Sprintf("nsenter -t %d -n ip link set %s down", pid, oldName)
 	if err := tc.executeCommand(cmd); err != nil {
@@ -373,6 +386,7 @@ func (tc *TCTrafficCapture) renameInterface(pid int, oldName, newName string) er
 }
 
 // createVethPairInNamespace 在命名空间中创建veth pair
+// 创建veth pair并将peer端移动到主机命名空间
 func (tc *TCTrafficCapture) createVethPairInNamespace(pid int, localName, peerName string, index uint) error {
 	// 在容器命名空间中创建veth pair
 	cmd := fmt.Sprintf("nsenter -t %d -n ip link add %s type veth peer name %s", 
@@ -387,6 +401,7 @@ func (tc *TCTrafficCapture) createVethPairInNamespace(pid int, localName, peerNa
 }
 
 // configureVethPair 配置veth pair
+// 设置MAC地址、IP配置和bridge连接
 func (tc *TCTrafficCapture) configureVethPair(pid int, localName, peerName, externalName string, 
 	originalMAC, nvMAC net.HardwareAddr) error {
 	
@@ -450,6 +465,7 @@ func (tc *TCTrafficCapture) configureVethPair(pid int, localName, peerName, exte
 }
 
 // setupTCRules 设置Traffic Control规则
+// 配置流量mirror规则将数据包复制到NV bridge
 func (tc *TCTrafficCapture) setupTCRules(vethPair *VethPairInfo, containerInfo *TCContainerInfo) error {
 	log.WithField("interface", vethPair.OriginalName).Debug("Setting up TC rules")
 	
@@ -525,6 +541,7 @@ func (tc *TCTrafficCapture) setupTCRules(vethPair *VethPairInfo, containerInfo *
 }
 
 // getAvailablePref 获取可用的TC优先级
+// 分配唯一的TC规则优先级避免冲突
 func (tc *TCTrafficCapture) getAvailablePref(portIndex uint) uint {
 	pref := portIndex % TC_PREF_MAX
 	
@@ -545,6 +562,7 @@ func (tc *TCTrafficCapture) getAvailablePref(portIndex uint) uint {
 }
 
 // StopContainerCapture 停止捕获容器流量
+// 清理容器的TC规则和veth pair配置
 func (tc *TCTrafficCapture) StopContainerCapture(containerID string) error {
 	tc.mutex.Lock()
 	defer tc.mutex.Unlock()
@@ -591,6 +609,7 @@ func (tc *TCTrafficCapture) StopContainerCapture(containerID string) error {
 }
 
 // cleanupVethPair 清理veth pair
+// 删除qdisc和veth pair接口
 func (tc *TCTrafficCapture) cleanupVethPair(vethPair *VethPairInfo) {
 	// 删除qdisc
 	tc.delQDisc(vethPair.InternalName)
@@ -608,6 +627,7 @@ type IPConfig struct {
 }
 
 // getInterfaceIPConfig 获取接口的IP配置
+// 解析容器接口的IP地址和网关信息
 func (tc *TCTrafficCapture) getInterfaceIPConfig(pid int, iface string) (*IPConfig, error) {
 	config := &IPConfig{}
 	
@@ -651,6 +671,8 @@ func (tc *TCTrafficCapture) getInterfaceIPConfig(pid int, iface string) (*IPConf
 	
 	return config, nil
 }
+// cleanupContainerInterfaces 清理容器接口
+// 删除容器和主机侧的nv-开头接口
 func (tc *TCTrafficCapture) cleanupContainerInterfaces(pid int) {
 	// 清理容器中的nv-接口
 	cmd := fmt.Sprintf("nsenter -t %d -n ip link show", pid)
@@ -696,6 +718,8 @@ func (tc *TCTrafficCapture) cleanupContainerInterfaces(pid int) {
 		}
 	}
 }
+// executeCommand 执行系统命令
+// 执行TC和网络配置命令并记录日志
 func (tc *TCTrafficCapture) executeCommand(command string) error {
 	log.WithField("cmd", command).Debug("Executing TC command")
 	
@@ -715,6 +739,7 @@ func (tc *TCTrafficCapture) executeCommand(command string) error {
 }
 
 // GetCapturedContainers 获取正在捕获的容器列表
+// 返回当前配置了TC规则的容器名称列表
 func (tc *TCTrafficCapture) GetCapturedContainers() []string {
 	tc.mutex.RLock()
 	defer tc.mutex.RUnlock()
@@ -728,6 +753,7 @@ func (tc *TCTrafficCapture) GetCapturedContainers() []string {
 }
 
 // Cleanup 清理所有TC规则和bridge
+// 停止所有容器捕获并清理NV bridge
 func (tc *TCTrafficCapture) Cleanup() error {
 	tc.mutex.Lock()
 	defer tc.mutex.Unlock()
