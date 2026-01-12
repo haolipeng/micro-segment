@@ -4,6 +4,35 @@
 
 本文档详细介绍网络拓扑中的策略可视化实现，包括三层链接系统、策略动作映射和策略 ID 关联机制。
 
+```mermaid
+flowchart TB
+    subgraph Links["三层链接系统"]
+        Policy["policyLink<br/>策略规则定义"]
+        Graph["graphLink<br/>实际流量"]
+        Attr["attrLink<br/>节点属性"]
+    end
+
+    subgraph Actions["策略动作"]
+        Open["Open<br/>灰色"]
+        Allow["Allow<br/>绿色"]
+        Deny["Deny<br/>红色"]
+        Violate["Violate<br/>橙色虚线"]
+    end
+
+    subgraph Modes["策略模式"]
+        Protect["Protect<br/>绿色节点"]
+        Monitor["Monitor<br/>蓝色节点"]
+        Discover["Discover<br/>黄色节点"]
+    end
+
+    Links --> Actions
+    Links --> Modes
+
+    style Links fill:#e3f2fd
+    style Actions fill:#e8f5e9
+    style Modes fill:#fff3e0
+```
+
 ## 二、关键源文件
 
 | 文件 | 路径 | 功能 |
@@ -29,32 +58,39 @@ const (
 
 ### 3.2 三层链接关系
 
+```mermaid
+flowchart TB
+    subgraph NodeA["Node A"]
+        subgraph AttrSelf["attrLink → Node A (自环)"]
+            NA["nodeAttr<br/>alias, external, workload, host"]
+        end
+
+        subgraph PolicyB["policyLink → Node B"]
+            PA["polAttr<br/>ports, apps, portsSeen<br/>表示: 策略允许 A 访问 B"]
+        end
+
+        subgraph GraphB["graphLink → Node B"]
+            GA["graphAttr<br/>bytes, sessions, severity<br/>表示: A 实际访问了 B"]
+        end
+    end
+
+    style NodeA fill:#e3f2fd
+    style AttrSelf fill:#f3e5f5
+    style PolicyB fill:#e8f5e9
+    style GraphB fill:#fff3e0
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                      三层链接系统                                │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                 │
-│  Node A                                                         │
-│  │                                                              │
-│  ├── attrLink → Node A (自环)                                   │
-│  │   └── nodeAttr { alias, external, workload, host, ... }     │
-│  │                                                              │
-│  ├── policyLink → Node B                                        │
-│  │   └── polAttr { ports, apps, portsSeen }                    │
-│  │       表示: 策略规则允许 A 访问 B                            │
-│  │                                                              │
-│  └── graphLink → Node B                                         │
-│      └── graphAttr { bytes, sessions, severity, entries }      │
-│          表示: A 实际访问了 B                                   │
-│                                                                 │
-│  ┌─────────────────────────────────────────────────────────┐   │
-│  │  同一对节点可能同时存在 policyLink 和 graphLink:          │   │
-│  │  - policyLink 存在, graphLink 不存在 → 允许但未发生       │   │
-│  │  - policyLink 存在, graphLink 存在   → 允许且已发生       │   │
-│  │  - policyLink 不存在, graphLink 存在 → 未允许但已发生(违规)│   │
-│  └─────────────────────────────────────────────────────────┘   │
-│                                                                 │
-└─────────────────────────────────────────────────────────────────┘
+
+```mermaid
+flowchart LR
+    subgraph 链接状态对比
+        S1["policyLink ✓<br/>graphLink ✗"] --> R1["允许但未发生"]
+        S2["policyLink ✓<br/>graphLink ✓"] --> R2["允许且已发生"]
+        S3["policyLink ✗<br/>graphLink ✓"] --> R3["未允许但已发生<br/>(违规)"]
+    end
+
+    style S1 fill:#e8f5e9
+    style S2 fill:#c8e6c9
+    style S3 fill:#ffcdd2
 ```
 
 ### 3.3 属性结构对比
@@ -163,6 +199,31 @@ func aggregatePolicyAction(actions []uint8) uint8 {
 ```
 
 ## 六、策略动作可视化
+
+```mermaid
+stateDiagram-v2
+    [*] --> Open: 无策略规则
+    [*] --> Discover: Discover 模式
+
+    Discover --> Allow: 学习完成<br/>创建规则
+    Discover --> Monitor: 切换模式
+
+    Open --> Allow: 添加允许规则
+    Open --> Deny: 添加拒绝规则
+
+    Monitor --> Violate: 不符合规则
+    Monitor --> Allow: 符合规则
+
+    Protect --> Allow: 符合规则
+    Protect --> Deny: 不符合规则<br/>(阻断)
+
+    state "颜色映射" as Colors {
+        Open: 灰色 #999999
+        Allow: 绿色 #52c41a
+        Deny: 红色 #ff4d4f
+        Violate: 橙色虚线 #ff7a45
+    }
+```
 
 ### 6.1 策略动作定义
 
@@ -312,42 +373,28 @@ type graphEntry struct {
 
 ### 7.2 策略匹配流程
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                    策略匹配和 ID 关联流程                         │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                 │
-│  1. 数据平面 (DP) 检测到新连接                                   │
-│     ├── 源 IP: 10.0.0.1 (Container A)                          │
-│     ├── 目标 IP: 10.0.0.2 (Container B)                        │
-│     └── 目标端口: 80/TCP                                        │
-│     ↓                                                           │
-│  2. DP 查询策略规则                                              │
-│     ├── 遍历规则表                                               │
-│     ├── 匹配: Rule #1001 (Allow A → B on port 80)              │
-│     └── 记录: PolicyAction=ALLOW, PolicyID=1001                │
-│     ↓                                                           │
-│  3. Agent 上报连接                                               │
-│     CLUSConnection {                                           │
-│         ClientWL: "container-a",                               │
-│         ServerWL: "container-b",                               │
-│         ServerPort: 80,                                        │
-│         PolicyAction: 1,  // ALLOW                             │
-│         PolicyId: 1001,   // 匹配的规则 ID                      │
-│     }                                                          │
-│     ↓                                                           │
-│  4. Controller 存储到图                                         │
-│     graphEntry {                                               │
-│         policyAction: 1,                                       │
-│         policyID: 1001,                                        │
-│     }                                                          │
-│     ↓                                                           │
-│  5. 前端查询并显示                                               │
-│     ├── 获取边的 policyAction 和 policyID                       │
-│     ├── 根据 policyAction 设置边颜色                            │
-│     └── 支持点击边查看关联的策略规则详情                         │
-│                                                                 │
-└─────────────────────────────────────────────────────────────────┘
+```mermaid
+sequenceDiagram
+    participant DP as 数据平面 (DP)
+    participant Agent as Agent
+    participant Controller as Controller
+    participant UI as 前端
+
+    DP->>DP: 1. 检测新连接<br/>10.0.0.1 → 10.0.0.2:80
+
+    DP->>DP: 2. 查询策略规则<br/>匹配 Rule #1001
+
+    DP->>Agent: 3. 上报连接<br/>PolicyAction=ALLOW<br/>PolicyId=1001
+
+    Agent->>Controller: 4. gRPC 上报
+
+    Controller->>Controller: 5. 存储到图<br/>graphEntry.policyID=1001
+
+    UI->>Controller: 6. GET /v1/conversation
+
+    Controller-->>UI: 7. 返回 policyAction + policyID
+
+    UI->>UI: 8. 根据 policyAction 设置边颜色<br/>支持点击查看规则详情
 ```
 
 ### 7.3 REST API 返回

@@ -10,45 +10,40 @@ NeuVector 的网络拓扑功能实时展示容器间的网络通信关系，包�
 
 ## 二、整体架构
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                     网络拓扑系统架构                               │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                 │
-│  ┌─────────────────────────────────────────────────────────┐   │
-│  │                      前端 (UI)                           │   │
-│  │  - 拓扑图渲染                                            │   │
-│  │  - 节点/边交互                                           │   │
-│  │  - 过滤和搜索                                            │   │
-│  └─────────────────────────┬───────────────────────────────┘   │
-│                            │ REST API                          │
-│                            ▼                                    │
-│  ┌─────────────────────────────────────────────────────────┐   │
-│  │                    Controller                            │   │
-│  │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐      │   │
-│  │  │ REST API    │  │  图数据结构  │  │  拓扑缓存   │      │   │
-│  │  │ (conver.go) │  │ (graph.go)  │  │(connect.go)│      │   │
-│  │  └─────────────┘  └─────────────┘  └─────────────┘      │   │
-│  └─────────────────────────┬───────────────────────────────┘   │
-│                            │ gRPC                              │
-│                            ▼                                    │
-│  ┌─────────────────────────────────────────────────────────┐   │
-│  │                      Agent                               │   │
-│  │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐      │   │
-│  │  │ 连接收集    │  │  连接缓存   │  │ gRPC上报    │      │   │
-│  │  │(timer.go)   │  │connectionMap│  │ (grpc.go)   │      │   │
-│  │  └─────────────┘  └─────────────┘  └─────────────┘      │   │
-│  └─────────────────────────┬───────────────────────────────┘   │
-│                            │                                    │
-│                            ▼                                    │
-│  ┌─────────────────────────────────────────────────────────┐   │
-│  │                    数据平面 (DP)                         │   │
-│  │  - 会话跟踪                                              │   │
-│  │  - 协议识别                                              │   │
-│  │  - 流量统计                                              │   │
-│  └─────────────────────────────────────────────────────────┘   │
-│                                                                 │
-└─────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TB
+    subgraph UI["前端 (UI)"]
+        UI1[拓扑图渲染]
+        UI2[节点/边交互]
+        UI3[过滤和搜索]
+    end
+
+    subgraph Controller["Controller"]
+        C1["REST API<br/>(conver.go)"]
+        C2["图数据结构<br/>(graph.go)"]
+        C3["拓扑缓存<br/>(connect.go)"]
+    end
+
+    subgraph Agent["Agent"]
+        A1["连接收集<br/>(timer.go)"]
+        A2["连接缓存<br/>(connectionMap)"]
+        A3["gRPC上报<br/>(grpc.go)"]
+    end
+
+    subgraph DP["数据平面 (DP)"]
+        D1[会话跟踪]
+        D2[协议识别]
+        D3[流量统计]
+    end
+
+    UI -->|REST API| Controller
+    Controller -->|gRPC| Agent
+    Agent --> DP
+
+    style UI fill:#e1f5fe
+    style Controller fill:#fff3e0
+    style Agent fill:#f3e5f5
+    style DP fill:#e8f5e9
 ```
 
 ## 三、核心组件
@@ -117,41 +112,45 @@ func UpdateConnections(conns []*share.CLUSConnection) {
 
 ## 四、数据流
 
+```mermaid
+flowchart LR
+    A[容器 A] -->|1. 发起连接| B[容器 B]
+    B --> DP[2. DP 检测]
+    DP -->|记录连接信息| Agent[3. Agent 收集]
+    Agent -->|缓存到 connectionMap| Agent
+    Agent -->|4. gRPC 上报<br/>CLUSConnection| Controller[5. Controller]
+    Controller -->|AddLink| Graph[更新拓扑图]
+    Graph --> API[6. REST API]
+    API -->|GET /v1/conversation| UI[7. 前端渲染]
+
+    style DP fill:#e8f5e9
+    style Agent fill:#f3e5f5
+    style Controller fill:#fff3e0
+    style UI fill:#e1f5fe
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                        完整数据流                                │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                 │
-│  1. 容器 A 发起连接到容器 B                                      │
-│     ↓                                                           │
-│  2. DP 检测到新连接/会话                                         │
-│     - 记录: 源IP, 目标IP, 端口, 协议                            │
-│     - 识别: 应用类型 (HTTP/MySQL/...)                           │
-│     - 统计: 字节数, 会话数                                       │
-│     ↓                                                           │
-│  3. Agent 收集连接信息                                           │
-│     - 从 DP 获取连接列表                                         │
-│     - 缓存到 connectionMap                                       │
-│     - 定期 (5秒) 批量发送                                        │
-│     ↓                                                           │
-│  4. gRPC 上报: Agent → Controller                                │
-│     - CLUSConnection protobuf 格式                               │
-│     - 包含: ClientWL, ServerWL, Bytes, Sessions, ...            │
-│     ↓                                                           │
-│  5. Controller 更新拓扑图                                        │
-│     - 调用 wlGraph.AddLink(from, "graph", to, attr)             │
-│     - 更新 graphEntry 统计                                       │
-│     - 聚合计算 graphAttr                                         │
-│     ↓                                                           │
-│  6. 前端请求拓扑数据                                             │
-│     - GET /v1/conversation_endpoint (节点列表)                   │
-│     - GET /v1/conversation (边列表)                              │
-│     ↓                                                           │
-│  7. 渲染拓扑图                                                   │
-│     - 节点: 容器/服务/主机                                       │
-│     - 边: 连接关系 (带流量统计)                                  │
-│                                                                 │
-└─────────────────────────────────────────────────────────────────┘
+
+```mermaid
+sequenceDiagram
+    participant A as 容器 A
+    participant B as 容器 B
+    participant DP as 数据平面
+    participant Agent as Agent
+    participant Controller as Controller
+    participant UI as 前端
+
+    A->>B: 1. TCP 连接
+    DP->>DP: 2. 检测会话/识别协议
+    DP->>Agent: 3. 上报连接信息
+    Agent->>Agent: 4. 缓存到 connectionMap
+
+    loop 每 5 秒
+        Agent->>Controller: 5. gRPC 批量上报
+        Controller->>Controller: 6. 更新 wlGraph
+    end
+
+    UI->>Controller: 7. GET /v1/conversation
+    Controller->>UI: 8. 返回拓扑数据
+    UI->>UI: 9. 渲染拓扑图
 ```
 
 ## 五、核心数据结构

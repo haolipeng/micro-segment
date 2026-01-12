@@ -4,6 +4,64 @@
 
 NeuVector 提供一组 REST API 用于获取和管理网络拓扑数据，包括端点列表、会话列表和会话详情。
 
+```mermaid
+flowchart LR
+    subgraph Client["客户端"]
+        UI[前端 UI]
+    end
+
+    subgraph API["REST API"]
+        EP["/v1/conversation_endpoint"]
+        Conv["/v1/conversation"]
+        Detail["/v1/conversation/:from/:to"]
+    end
+
+    subgraph Handler["处理函数"]
+        H1[handlerConverEndpointList]
+        H2[handlerConverList]
+        H3[handlerConverShow]
+    end
+
+    subgraph Cache["缓存层"]
+        C1[GetAllConverEndpoints]
+        C2[GetAllApplicationConvers]
+        C3[GetApplicationConver]
+    end
+
+    UI -->|GET| EP
+    UI -->|GET| Conv
+    UI -->|GET| Detail
+
+    EP --> H1 --> C1
+    Conv --> H2 --> C2
+    Detail --> H3 --> C3
+
+    style Client fill:#e1f5fe
+    style API fill:#fff3e0
+    style Handler fill:#f3e5f5
+    style Cache fill:#e8f5e9
+```
+
+```mermaid
+sequenceDiagram
+    participant UI as 前端
+    participant API as REST API
+    participant Handler as Handler
+    participant Cache as Cache
+    participant Graph as wlGraph
+
+    UI->>API: GET /v1/conversation
+    API->>Handler: handlerConverList
+    Handler->>Handler: getAccessControl 权限检查
+    Handler->>Cache: GetAllApplicationConvers
+    Cache->>Graph: 遍历节点和边
+    Graph-->>Cache: 返回 graphAttr
+    Cache->>Cache: 转换为 REST 格式
+    Cache-->>Handler: []RESTConversation
+    Handler-->>API: JSON Response
+    API-->>UI: 200 OK + 数据
+```
+
 ## 二、API 端点总览
 
 | 方法 | 端点 | 功能 |

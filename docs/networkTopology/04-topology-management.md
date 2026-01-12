@@ -8,9 +8,85 @@
 - 管理节点属性
 - 提供拓扑查询接口
 
+```mermaid
+flowchart LR
+    subgraph Input["输入"]
+        Conn[CLUSConnection]
+    end
+
+    subgraph Process["处理流程"]
+        Update[UpdateConnections]
+        Add[addConnectToGraph]
+        Recalc[recalcConversation]
+    end
+
+    subgraph Storage["存储"]
+        Graph[wlGraph]
+        Entry[graphEntry]
+        Attr[graphAttr]
+    end
+
+    subgraph Output["输出"]
+        API[REST API]
+    end
+
+    Conn --> Update
+    Update --> Add
+    Add --> Entry
+    Entry --> Recalc
+    Recalc --> Attr
+    Attr --> Graph
+    Graph --> API
+
+    style Input fill:#e8f5e9
+    style Process fill:#fff3e0
+    style Storage fill:#e3f2fd
+    style Output fill:#f3e5f5
+```
+
 ## 二、核心数据结构
 
 **源码位置**: `controller/cache/connect.go:51-103`
+
+```mermaid
+classDiagram
+    class graphKey {
+        +uint16 port
+        +uint8 ipproto
+        +uint32 application
+        +uint32 cip
+        +uint32 sip
+    }
+
+    class graphEntry {
+        +uint64 bytes
+        +uint32 sessions
+        +uint32 threatID
+        +uint8 severity
+        +uint8 policyAction
+        +uint32 policyID
+        +uint32 last
+        +string fqdn
+    }
+
+    class graphAttr {
+        +uint64 bytes
+        +uint32 sessions
+        +uint8 severity
+        +uint8 policyAction
+        +map entries
+    }
+
+    class nodeAttr {
+        +bool external
+        +bool workload
+        +bool host
+        +bool managed
+        +string alias
+    }
+
+    graphAttr "1" --> "*" graphEntry : entries[graphKey]
+```
 
 ### 2.1 图条目 (graphEntry)
 

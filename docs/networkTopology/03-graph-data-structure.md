@@ -12,6 +12,36 @@ NeuVector 使用自定义的有向图数据结构来存储网络拓扑，支持�
 
 **源码位置**: `controller/graph/graph.go`
 
+```mermaid
+classDiagram
+    class Graph {
+        +map~string, graphNode~ nodes
+        +NewLinkCallback cbNewLink
+        +DelNodeCallback cbDelNode
+        +DelLinkCallback cbDelLink
+        +UpdateLinkAttrCallback cbUpdateLinkAttr
+        +AddLink(src, link, dst, attr)
+        +DeleteLink(src, link, dst)
+        +DeleteNode(node)
+        +Attr(src, link, dst) interface
+        +Ins(node) Set
+        +Outs(node) Set
+    }
+
+    class graphNode {
+        +map~string, graphLink~ ins
+        +map~string, graphLink~ outs
+    }
+
+    class graphLink {
+        +map~string, interface~ ends
+    }
+
+    Graph "1" --> "*" graphNode : nodes
+    graphNode "1" --> "*" graphLink : ins/outs
+    graphLink "1" --> "*" interface : ends
+```
+
 ### 2.1 图结构
 
 ```go
@@ -54,42 +84,47 @@ type PurgeOutLinkCallback func(src, link, dst string, attr interface{}, param in
 
 ## 三、图的存储模型
 
+```mermaid
+flowchart TB
+    subgraph Graph["Graph.nodes"]
+        subgraph NodeA["container-A (graphNode)"]
+            subgraph InsA["ins"]
+                InsGraph["graph → graphLink"]
+                InsGraphEnds["ends: container-C → graphAttr"]
+            end
+            subgraph OutsA["outs"]
+                OutsGraph["graph → graphLink"]
+                OutsGraphEnds["ends:<br/>container-B → graphAttr<br/>external:1.2.3.4 → graphAttr"]
+                OutsPolicy["policy → graphLink"]
+                OutsPolicyEnds["ends: container-B → polAttr"]
+            end
+        end
+        NodeB["container-B (graphNode)"]
+        NodeC["container-C (graphNode)"]
+        NodeExt["external:1.2.3.4 (graphNode)"]
+    end
+
+    style NodeA fill:#e3f2fd
+    style InsA fill:#e8f5e9
+    style OutsA fill:#fff3e0
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                        图存储模型                                │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                 │
-│  Graph.nodes (map[string]*graphNode)                           │
-│  ┌──────────────────────────────────────────────────────────┐  │
-│  │  "container-A" → graphNode {                              │  │
-│  │      ins: {                                               │  │
-│  │          "graph" → graphLink {                            │  │
-│  │              ends: {                                      │  │
-│  │                  "container-C" → graphAttr{...}          │  │
-│  │              }                                            │  │
-│  │          }                                                │  │
-│  │      }                                                    │  │
-│  │      outs: {                                              │  │
-│  │          "graph" → graphLink {                            │  │
-│  │              ends: {                                      │  │
-│  │                  "container-B" → graphAttr{...}          │  │
-│  │                  "external:1.2.3.4" → graphAttr{...}     │  │
-│  │              }                                            │  │
-│  │          }                                                │  │
-│  │          "policy" → graphLink {                           │  │
-│  │              ends: {                                      │  │
-│  │                  "container-B" → polAttr{...}            │  │
-│  │              }                                            │  │
-│  │          }                                                │  │
-│  │      }                                                    │  │
-│  │  }                                                        │  │
-│  │                                                           │  │
-│  │  "container-B" → graphNode {...}                         │  │
-│  │  "container-C" → graphNode {...}                         │  │
-│  │  "external:1.2.3.4" → graphNode {...}                    │  │
-│  └──────────────────────────────────────────────────────────┘  │
-│                                                                 │
-└─────────────────────────────────────────────────────────────────┘
+
+```mermaid
+flowchart LR
+    subgraph 链接类型
+        policy["policy<br/>策略链接"]
+        graph["graph<br/>流量链接"]
+        attr["attr<br/>属性链接"]
+    end
+
+    A[Container A] -->|graph| B[Container B]
+    A -->|policy| B
+    A -->|graph| C[External IP]
+    B -->|attr| B
+
+    style policy fill:#bbdefb
+    style graph fill:#c8e6c9
+    style attr fill:#ffe0b2
 ```
 
 ## 四、核心操作

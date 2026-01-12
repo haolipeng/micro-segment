@@ -6,27 +6,63 @@
 
 ## 二、数据获取流程
 
+```mermaid
+flowchart TB
+    subgraph Step1["1. 获取端点列表"]
+        API1["GET /v1/conversation_endpoint"]
+    end
+
+    subgraph Step2["2. 获取会话列表"]
+        API2["GET /v1/conversation"]
+    end
+
+    subgraph Step3["3. 数据转换"]
+        Conv1["端点 → 拓扑节点"]
+        Conv2["会话 → 拓扑边"]
+    end
+
+    subgraph Step4["4. 渲染拓扑图"]
+        R1["力导向布局<br/>(D3.js / vis.js)"]
+        R2["节点样式<br/>(图标、颜色、大小)"]
+        R3["边样式<br/>(粗细、颜色、箭头)"]
+    end
+
+    API1 --> API2
+    API2 --> Conv1
+    API2 --> Conv2
+    Conv1 --> R1
+    Conv2 --> R1
+    R1 --> R2
+    R1 --> R3
+
+    style Step1 fill:#e3f2fd
+    style Step2 fill:#e8f5e9
+    style Step3 fill:#fff3e0
+    style Step4 fill:#f3e5f5
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                     前端数据获取流程                              │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                 │
-│  1. 获取端点列表                                                 │
-│     GET /v1/conversation_endpoint                               │
-│     ↓                                                           │
-│  2. 获取会话列表                                                 │
-│     GET /v1/conversation                                        │
-│     ↓                                                           │
-│  3. 数据转换                                                     │
-│     - 端点 → 拓扑节点                                           │
-│     - 会话 → 拓扑边                                             │
-│     ↓                                                           │
-│  4. 渲染拓扑图                                                   │
-│     - 力导向布局 (D3.js / vis.js)                               │
-│     - 节点样式 (图标、颜色、大小)                                │
-│     - 边样式 (粗细、颜色、箭头)                                  │
-│                                                                 │
-└─────────────────────────────────────────────────────────────────┘
+
+```mermaid
+sequenceDiagram
+    participant UI as 前端 UI
+    participant API as REST API
+    participant Cache as Controller Cache
+    participant Graph as wlGraph
+
+    UI->>API: GET /v1/conversation_endpoint
+    API->>Cache: GetAllConverEndpoints
+    Cache->>Graph: 遍历节点
+    Graph-->>Cache: 返回节点列表
+    Cache-->>API: []*RESTConversationEndpoint
+    API-->>UI: endpoints[]
+
+    UI->>API: GET /v1/conversation
+    API->>Cache: GetAllApplicationConvers
+    Cache->>Graph: 遍历边
+    Graph-->>Cache: 返回边列表
+    Cache-->>API: conversations[]
+    API-->>UI: conversations[]
+
+    UI->>UI: 数据转换 & 渲染
 ```
 
 ## 三、API 调用示例

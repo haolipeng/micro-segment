@@ -4,6 +4,36 @@
 
 本文档详细介绍网络拓扑系统的性能优化机制，包括缓存结构、增量更新、TTL/淘汰策略和大规模集群优化。
 
+```mermaid
+flowchart TB
+    subgraph Cache["缓存层优化"]
+        C1["O(1) 查找<br/>graphKey map"]
+        C2["聚合统计<br/>graphAttr"]
+        C3["LRU 淘汰<br/>容量限制"]
+    end
+
+    subgraph Sync["增量同步"]
+        S1["ModifyIdx 机制"]
+        S2["Gzip 压缩"]
+        S3["条件同步"]
+    end
+
+    subgraph GC["垃圾回收"]
+        G1["TTL 过期清理"]
+        G2["定时器驱动"]
+        G3["锁分离"]
+    end
+
+    Agent[Agent 上报] --> Cache
+    Cache --> Sync
+    Sync --> Controller[其他 Controller]
+    Cache --> GC
+
+    style Cache fill:#e3f2fd
+    style Sync fill:#e8f5e9
+    style GC fill:#fff3e0
+```
+
 ## 二、关键源文件
 
 | 文件 | 路径 | 功能 |
@@ -17,27 +47,33 @@
 
 ### 3.1 核心结构关系
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                      缓存数据结构层次                             │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                 │
-│  wlGraph (全局图)                                               │
-│  ├── Node A                                                     │
-│  │   ├── Outs["graph"] → graphLink                             │
-│  │   │   └── ends["Node B"] → graphAttr                        │
-│  │   │       ├── bytes: 1234567                                │
-│  │   │       ├── sessions: 100                                 │
-│  │   │       └── entries: map[graphKey]*graphEntry             │
-│  │   │           ├── key1 → entry1                             │
-│  │   │           ├── key2 → entry2                             │
-│  │   │           └── key3 → entry3                             │
-│  │   └── Outs["policy"] → graphLink                            │
-│  │       └── ends["Node B"] → polAttr                          │
-│  └── Node B                                                     │
-│      └── ...                                                    │
-│                                                                 │
-└─────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TB
+    subgraph wlGraph["wlGraph (全局图)"]
+        subgraph NodeA["Node A"]
+            subgraph OutsGraph["Outs['graph']"]
+                GraphLink["graphLink"]
+                subgraph EndsB["ends['Node B']"]
+                    GraphAttr["graphAttr<br/>bytes: 1234567<br/>sessions: 100"]
+                    subgraph Entries["entries: map"]
+                        E1["key1 → entry1"]
+                        E2["key2 → entry2"]
+                        E3["key3 → entry3"]
+                    end
+                end
+            end
+            subgraph OutsPolicy["Outs['policy']"]
+                PolicyLink["graphLink"]
+                PolAttr["ends['Node B'] → polAttr"]
+            end
+        end
+        NodeB["Node B → ..."]
+    end
+
+    style wlGraph fill:#e3f2fd
+    style NodeA fill:#e8f5e9
+    style OutsGraph fill:#fff3e0
+    style Entries fill:#f3e5f5
 ```
 
 ### 3.2 graphKey - 快速查找键
@@ -246,33 +282,20 @@ func decompressData(compressed []byte, target interface{}) error {
 
 ### 4.4 增量更新流程
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                      增量更新流程                                │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                 │
-│  1. Agent 上报新连接                                            │
-│     ↓                                                           │
-│  2. Controller 接收并更新图                                      │
-│     ├── 检查 graphAttr 是否存在                                  │
-│     ├── 存在: 更新 entries[key]                                 │
-│     └── 不存在: 创建新 graphAttr                                │
-│     ↓                                                           │
-│  3. 增加 ModifyIdx                                              │
-│     syncCatgAuxArray[syncCatgGraph].modifyIdx++                │
-│     ↓                                                           │
-│  4. 其他 Controller 请求同步                                    │
-│     ├── 发送自身 ModifyIdx                                      │
-│     └── 请求 > ModifyIdx 的数据                                 │
-│     ↓                                                           │
-│  5. 主 Controller 返回增量数据                                   │
-│     ├── 只返回新增/更新的条目                                    │
-│     └── Gzip 压缩传输                                           │
-│     ↓                                                           │
-│  6. 从 Controller 应用更新                                      │
-│     └── 更新本地 ModifyIdx                                      │
-│                                                                 │
-└─────────────────────────────────────────────────────────────────┘
+```mermaid
+sequenceDiagram
+    participant Agent as Agent
+    participant Main as 主 Controller
+    participant Slave as 从 Controller
+
+    Agent->>Main: 1. 上报新连接
+    Main->>Main: 2. 更新图<br/>检查 graphAttr 是否存在
+    Main->>Main: 3. 增加 ModifyIdx++
+
+    Slave->>Main: 4. 请求同步 (携带自身 ModifyIdx)
+    Main->>Main: 5. 筛选 > ModifyIdx 的数据
+    Main->>Slave: 6. 返回增量数据 (Gzip)
+    Slave->>Slave: 7. 应用更新<br/>更新本地 ModifyIdx
 ```
 
 ## 五、TTL/淘汰策略
@@ -528,39 +551,51 @@ func startBackgroundTasks() {
 
 ### 6.4 连接处理流水线
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                    连接处理流水线                                 │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                 │
-│  UpdateConnections(conns)                                       │
-│  │                                                              │
-│  ├─ preQualifyConnect()          // 预检查                      │
-│  │   ├─ 验证工作负载存在                                        │
-│  │   └─ 验证策略 ID 有效                                        │
-│  │                                                              │
-│  ├─ calNetPolicyMet(conn)        // 计算网络策略指标            │
-│  │   └─ policyMetricMap[polId]++ // 增加匹配计数                │
-│  │                                                              │
-│  ├─ CalculateGroupMetric(conn)   // 计算组指标 (用于限流检测)   │
-│  │   └─ groupMetricMap 统计      // 入站会话/带宽统计           │
-│  │                                                              │
-│  ├─ preProcessConnect()          // 预处理连接                  │
-│  │   ├─ connectFromGlobal()      // 检查来自全局 IP             │
-│  │   ├─ connectFromLocal()       // 检查来自本地                │
-│  │   ├─ connectToGlobal()        // 检查到全局 IP               │
-│  │   └─ connectToLocal()         // 检查到本地                  │
-│  │                                                              │
-│  ├─ postQualifyConnect()         // 后检查 (隔离检查)           │
-│  │   └─ 验证未被隔离                                            │
-│  │                                                              │
-│  └─ addConnectToGraph()          // 添加到拓扑图                │
-│      ├─ 创建/更新 graphEntry                                    │
-│      ├─ 聚合为 graphAttr                                        │
-│      ├─ removeOldEntries()       // LRU 删除                    │
-│      └─ recalcConversation()     // 重新计算汇总统计            │
-│                                                                 │
-└─────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TB
+    Update["UpdateConnections(conns)"]
+
+    subgraph Pre["预处理阶段"]
+        PreQualify["preQualifyConnect()<br/>验证工作负载/策略ID"]
+        CalNet["calNetPolicyMet()<br/>计算网络策略指标"]
+        CalGroup["CalculateGroupMetric()<br/>计算组指标 (限流检测)"]
+    end
+
+    subgraph Process["处理阶段"]
+        PreProcess["preProcessConnect()"]
+        FromGlobal["connectFromGlobal()"]
+        FromLocal["connectFromLocal()"]
+        ToGlobal["connectToGlobal()"]
+        ToLocal["connectToLocal()"]
+    end
+
+    subgraph Post["后处理阶段"]
+        PostQualify["postQualifyConnect()<br/>隔离检查"]
+        AddGraph["addConnectToGraph()"]
+        CreateEntry["创建/更新 graphEntry"]
+        Aggregate["聚合为 graphAttr"]
+        LRU["removeOldEntries()<br/>LRU 删除"]
+        Recalc["recalcConversation()<br/>重新计算汇总"]
+    end
+
+    Update --> PreQualify
+    PreQualify --> CalNet
+    CalNet --> CalGroup
+    CalGroup --> PreProcess
+    PreProcess --> FromGlobal
+    PreProcess --> FromLocal
+    PreProcess --> ToGlobal
+    PreProcess --> ToLocal
+    FromGlobal & FromLocal & ToGlobal & ToLocal --> PostQualify
+    PostQualify --> AddGraph
+    AddGraph --> CreateEntry
+    CreateEntry --> Aggregate
+    Aggregate --> LRU
+    LRU --> Recalc
+
+    style Pre fill:#e3f2fd
+    style Process fill:#e8f5e9
+    style Post fill:#fff3e0
 ```
 
 ## 七、性能监控指标

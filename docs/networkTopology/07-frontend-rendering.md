@@ -4,6 +4,62 @@
 
 本文档详细介绍网络拓扑的前端渲染实现，包括 D3.js 力导向图配置、节点和边的样式映射、交互功能实现。
 
+```mermaid
+flowchart TB
+    subgraph Data["数据层"]
+        API["REST API<br/>获取拓扑数据"]
+        Transform["数据转换<br/>Endpoint → Node<br/>Conversation → Link"]
+    end
+
+    subgraph D3["D3.js 渲染"]
+        Sim["力导向模拟<br/>forceSimulation"]
+        SVG["SVG 渲染<br/>节点 + 边"]
+        Tick["Tick 更新<br/>位置计算"]
+    end
+
+    subgraph Interact["交互层"]
+        Zoom["缩放平移<br/>d3.zoom"]
+        Drag["节点拖拽<br/>d3.drag"]
+        Event["事件处理<br/>点击/悬停"]
+    end
+
+    API --> Transform
+    Transform --> Sim
+    Sim --> SVG
+    Sim --> Tick
+    Tick --> SVG
+    SVG --> Zoom
+    SVG --> Drag
+    SVG --> Event
+
+    style Data fill:#e3f2fd
+    style D3 fill:#e8f5e9
+    style Interact fill:#fff3e0
+```
+
+```mermaid
+sequenceDiagram
+    participant User as 用户
+    participant React as React 组件
+    participant D3 as D3.js
+    participant SVG as SVG DOM
+
+    User->>React: 访问页面
+    React->>D3: 获取数据并初始化
+    D3->>D3: 创建力模拟
+    D3->>SVG: 绑定数据
+
+    loop 每帧 tick
+        D3->>D3: 计算节点位置
+        D3->>SVG: 更新 transform
+    end
+
+    User->>SVG: 交互 (拖拽/缩放)
+    SVG->>D3: 触发事件
+    D3->>D3: 重启模拟
+    D3->>SVG: 更新视图
+```
+
 ## 二、技术栈
 
 | 技术 | 版本 | 用途 |
@@ -24,6 +80,31 @@
 | 构建配置 | `web/vite.config.ts` | Vite + 代理配置 |
 
 ## 四、D3.js 力导向图配置
+
+```mermaid
+flowchart LR
+    subgraph Forces["力模型系统"]
+        Link["forceLink<br/>链接力"]
+        Charge["forceManyBody<br/>电荷力"]
+        Center["forceCenter<br/>中心力"]
+        Collide["forceCollide<br/>碰撞力"]
+    end
+
+    subgraph Effect["效果"]
+        E1["节点间距离"]
+        E2["节点斥力"]
+        E3["拉向中心"]
+        E4["防止重叠"]
+    end
+
+    Link --> E1
+    Charge --> E2
+    Center --> E3
+    Collide --> E4
+
+    style Forces fill:#e8f5e9
+    style Effect fill:#fff3e0
+```
 
 ### 4.1 力模型配置
 
@@ -321,6 +402,28 @@ link.attr('marker-end', 'url(#arrowhead)');
 ```
 
 ## 七、交互功能
+
+```mermaid
+stateDiagram-v2
+    [*] --> Idle: 初始化完成
+
+    Idle --> Hovering: 鼠标悬停节点
+    Hovering --> Idle: 鼠标移出
+    Hovering --> Selected: 点击节点
+
+    Idle --> Dragging: 开始拖拽
+    Dragging --> Idle: 释放拖拽
+
+    Idle --> Zooming: 滚轮/双指
+    Zooming --> Idle: 停止缩放
+
+    Idle --> Panning: 拖拽背景
+    Panning --> Idle: 释放
+
+    Selected --> Idle: 点击背景
+    Selected --> DetailView: 双击节点
+    DetailView --> Selected: 关闭详情
+```
 
 ### 7.1 缩放和平移
 

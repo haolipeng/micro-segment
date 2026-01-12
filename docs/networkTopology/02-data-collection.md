@@ -6,47 +6,59 @@
 
 ## 二、数据收集架构
 
+```mermaid
+flowchart TB
+    subgraph DP["数据平面 (DP)"]
+        D1[会话跟踪<br/>dpi_session]
+        D2[连接统计<br/>bytes, sessions]
+        D3[协议识别<br/>application]
+    end
+
+    subgraph Agent["Agent 连接收集"]
+        A1[connectionMap<br/>连接缓存]
+        A2[putConnections<br/>定期上报]
+        A3[conn2CLUS<br/>格式转换]
+        A4[sendConnections<br/>gRPC 发送]
+
+        A1 --> A2
+        A2 --> A3
+        A3 --> A4
+    end
+
+    subgraph Controller["Controller"]
+        C1[UpdateConnections]
+    end
+
+    DP -->|dp.Connection| Agent
+    Agent -->|gRPC| Controller
+
+    style DP fill:#e8f5e9
+    style Agent fill:#f3e5f5
+    style Controller fill:#fff3e0
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                      连接数据收集架构                             │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                 │
-│  ┌─────────────────────────────────────────────────────────┐   │
-│  │                    数据平面 (DP)                         │   │
-│  │  - 会话跟踪 (dpi_session)                                │   │
-│  │  - 连接统计 (bytes, sessions)                           │   │
-│  │  - 协议识别 (application)                                │   │
-│  └────────────────────────┬────────────────────────────────┘   │
-│                           │ dp.Connection                       │
-│                           ▼                                     │
-│  ┌─────────────────────────────────────────────────────────┐   │
-│  │                    Agent 连接收集                         │   │
-│  │                                                          │   │
-│  │  ┌──────────────────┐    ┌──────────────────┐           │   │
-│  │  │   connectionMap   │    │  putConnections  │           │   │
-│  │  │  (连接缓存)       │───▶│  (定期上报)      │           │   │
-│  │  └──────────────────┘    └──────────────────┘           │   │
-│  │                                   │                      │   │
-│  │                                   ▼                      │   │
-│  │                          ┌──────────────────┐           │   │
-│  │                          │   conn2CLUS      │           │   │
-│  │                          │  (格式转换)      │           │   │
-│  │                          └──────────────────┘           │   │
-│  │                                   │                      │   │
-│  │                                   ▼                      │   │
-│  │                          ┌──────────────────┐           │   │
-│  │                          │ sendConnections  │           │   │
-│  │                          │  (gRPC 发送)     │           │   │
-│  │                          └──────────────────┘           │   │
-│  └────────────────────────────────────┬────────────────────┘   │
-│                                       │                         │
-│                                       ▼ gRPC                    │
-│  ┌─────────────────────────────────────────────────────────┐   │
-│  │                    Controller                            │   │
-│  │                 UpdateConnections()                      │   │
-│  └─────────────────────────────────────────────────────────┘   │
-│                                                                 │
-└─────────────────────────────────────────────────────────────────┘
+
+```mermaid
+sequenceDiagram
+    participant DP as 数据平面
+    participant Cache as connectionMap
+    participant Timer as putConnections
+    participant GRPC as sendConnections
+    participant Controller as Controller
+
+    DP->>Cache: 1. 写入连接数据
+
+    loop 每 5 秒
+        Timer->>Cache: 2. 取出连接列表
+        Cache-->>Timer: 返回 list[]*Connection
+        Timer->>Timer: 3. conn2CLUS 转换
+        Timer->>GRPC: 4. 发送 CLUSConnection[]
+        GRPC->>Controller: 5. gRPC ReportConnections
+        Controller-->>GRPC: 6. 返回 ReportInterval
+
+        alt 发送失败
+            GRPC->>Cache: 7. 放回缓存重试
+        end
+    end
 ```
 
 ## 三、Agent 端连接收集
